@@ -6,7 +6,6 @@ defmodule Genesis.World do
   """
   use GenServer
 
-  alias __MODULE__
   alias Genesis.RPC
   alias Genesis.Aspect
   alias Genesis.Context
@@ -18,8 +17,7 @@ defmodule Genesis.World do
   Starts the World process.
   """
   def start_link(opts \\ []) do
-    name = Keyword.get(opts, :name, World)
-    GenServer.start_link(World, opts, name: name)
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @doc """
@@ -36,14 +34,14 @@ defmodule Genesis.World do
   List all aspects registered in the world.
   """
   def list_aspects() do
-    GenServer.call(World, :list_aspects)
+    GenServer.call(__MODULE__, :list_aspects)
   end
 
   @doc """
   List all objects spawned in the world.
   """
   def list_objects() do
-    GenServer.call(World, :list_objects)
+    GenServer.call(__MODULE__, :list_objects)
   end
 
   @doc """
@@ -52,7 +50,7 @@ defmodule Genesis.World do
   def register_aspect(module) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
-    GenServer.call(World, {:register_aspect, module})
+    GenServer.call(__MODULE__, {:register_aspect, module})
   end
 
   @doc """
@@ -61,7 +59,7 @@ defmodule Genesis.World do
   def register_prefab(attrs) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
-    GenServer.call(World, {:register_prefab, attrs})
+    GenServer.call(__MODULE__, {:register_prefab, attrs})
   end
 
   @doc """
@@ -69,21 +67,21 @@ defmodule Genesis.World do
   The prefab must be registered in the World before it can be used.
   """
   def create(prefab) do
-    GenServer.call(World, {:create, prefab})
+    GenServer.call(__MODULE__, {:create, prefab})
   end
 
   @doc """
   Clones an object with all the aspects as the original object.
   """
   def clone(object) do
-    GenServer.call(World, {:clone, object})
+    GenServer.call(__MODULE__, {:clone, object})
   end
 
   @doc """
   Destroys an object from the world.
   """
   def destroy(object) do
-    GenServer.call(World, {:destroy, object})
+    GenServer.call(__MODULE__, {:destroy, object})
   end
 
   @doc """
@@ -94,13 +92,13 @@ defmodule Genesis.World do
   def send(object, {op, aspect}) when op in [:"$attach", :"$remove", :"$update"] do
     # When sending an event to an object about the creation or removal of an aspect,
     # we also block to ensure that the respective ETS tables get updated for further consumption.
-    GenServer.call(World, {op, object, aspect})
+    GenServer.call(__MODULE__, {op, object, aspect})
   end
 
   def send(object, message) do
     # When sending messages that objects should handle, we don't block.
     # This is by design, because aspect handlers should work independently.
-    GenServer.cast(World, {:"$event", object, message})
+    GenServer.cast(__MODULE__, {:"$event", object, message})
   end
 
   @impl true
