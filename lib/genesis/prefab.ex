@@ -23,7 +23,7 @@ defmodule Genesis.Prefab do
 
     inherited =
       inherits
-      |> Enum.map(&Context.get(:genesis_prefabs, &1))
+      |> Enum.map(&Context.get!(:genesis_prefabs, &1))
       |> Enum.flat_map(& &1.aspects)
       |> Enum.map(&{&1.__struct__, {:inherit, Map.from_struct(&1)}})
 

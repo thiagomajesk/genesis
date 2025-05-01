@@ -20,6 +20,13 @@ defmodule Genesis.Context do
     end
   end
 
+  def get!(table, key) do
+    case get(table, key) do
+      nil -> raise "key #{inspect(key)} not found in #{inspect(table)}"
+      value -> value
+    end
+  end
+
   def remove(table, key) do
     :ets.delete(table, key)
   end
