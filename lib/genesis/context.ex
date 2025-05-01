@@ -1,4 +1,6 @@
 defmodule Genesis.Context do
+  @moduledoc false
+
   def init(table) do
     :ets.new(table, [:named_table, :set, write_concurrency: true])
   end

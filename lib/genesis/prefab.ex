@@ -1,4 +1,5 @@
 defmodule Genesis.Prefab do
+  @moduledoc false
   defstruct [:name, :inherit, :aspects]
 
   alias __MODULE__

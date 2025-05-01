@@ -1,4 +1,9 @@
 defmodule Genesis.World do
+  @moduledoc """
+  The World is a GenServer that acts as a registry and manages the lifecycle of objects and aspects.
+  It is responsible for creating, cloning, and destroying objects, as well as registering aspects and prefabs.
+  It also manages the event routing for objects and aspects, ensuring that events are dispatched to the correct handlers.
+  """
   use GenServer
 
   alias __MODULE__
@@ -9,46 +14,82 @@ defmodule Genesis.World do
 
   require Logger
 
+  @doc """
+  Starts the World process.
+  """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, World)
     GenServer.start_link(World, opts, name: name)
   end
 
+  @doc """
+  Creates a new unique object ID.
+  """
   def new(), do: System.unique_integer([:positive])
 
+  @doc """
+  Fetches the aspects of an object.
+  """
   def fetch(object), do: Context.all(:genesis_entities, object)
 
+  @doc """
+  List all aspects registered in the world.
+  """
   def list_aspects() do
     GenServer.call(World, :list_aspects)
   end
 
+  @doc """
+  List all objects spawned in the world.
+  """
   def list_objects() do
     GenServer.call(World, :list_objects)
   end
 
+  @doc """
+  Registers an aspect module.
+  """
   def register_aspect(module) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
     GenServer.call(World, {:register_aspect, module})
   end
 
+  @doc """
+  Registers a new prefab.
+  """
   def register_prefab(attrs) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
     GenServer.call(World, {:register_prefab, attrs})
   end
 
+  @doc """
+  Creates a new object from a prefab.
+  The prefab must be registered in the World before it can be used.
+  """
   def create(prefab) do
     GenServer.call(World, {:create, prefab})
   end
 
+  @doc """
+  Clones an object with all the aspects as the original object.
+  """
   def clone(object) do
     GenServer.call(World, {:clone, object})
   end
 
+  @doc """
+  Destroys an object from the world.
+  """
   def destroy(object) do
     GenServer.call(World, {:destroy, object})
   end
+
+  @doc """
+  Sends a message to an object.
+  """
+  def send(object, message)
 
   def send(object, {op, aspect}) when op in [:"$attach", :"$remove", :"$update"] do
     # When sending an event to an object about the creation or removal of an aspect,

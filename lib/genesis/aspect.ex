@@ -130,7 +130,10 @@ defmodule Genesis.Aspect do
   @callback handle_event(atom(), object(), map()) ::
               {:cont, map()} | {:halt, map()}
 
+  @doc false
   defguard is_enum(term) when is_list(term) or is_map(term)
+
+  @doc false
   defguard is_props(term) when is_enum(term) and not is_struct(term)
 
   defmacro __using__(opts \\ []) do
@@ -192,6 +195,9 @@ defmodule Genesis.Aspect do
     end
   end
 
+  @doc """
+  Defines a property for the aspect.
+  """
   defmacro prop(name, type, opts \\ []) do
     quote bind_quoted: [name: name, type: type, opts: opts] do
       Module.put_attribute(__MODULE__, :properties, {name, type, opts})
