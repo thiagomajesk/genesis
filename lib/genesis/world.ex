@@ -28,7 +28,7 @@ defmodule Genesis.World do
   @doc """
   Fetches the aspects of an object.
   """
-  def fetch(object), do: Context.all(:genesis_entities, object)
+  def fetch(object), do: Context.all(:genesis_objects, object)
 
   @doc """
   List all aspects registered in the world.
@@ -106,7 +106,7 @@ defmodule Genesis.World do
     start_router(opts)
 
     Context.init(:genesis_prefabs)
-    Context.init(:genesis_entities)
+    Context.init(:genesis_objects)
 
     # Aspects modules prefix used when loading prefabs.
     # By default it is set to "Elixir" to match the default module namespace.
@@ -125,7 +125,7 @@ defmodule Genesis.World do
   @impl true
   def terminate(reason, state) do
     Context.drop(:genesis_prefabs)
-    Context.drop(:genesis_entities)
+    Context.drop(:genesis_objects)
 
     Enum.each(state.aspects, &Context.drop(elem(&1, 0)))
 
@@ -145,7 +145,7 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call(:list_objects, _from, state) do
-    {:reply, Context.all(:genesis_entities), state}
+    {:reply, Context.all(:genesis_objects), state}
   end
 
   @impl true
@@ -195,7 +195,7 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:clone, object}, _from, state) do
-    aspects = Context.get(:genesis_entities, object)
+    aspects = Context.get(:genesis_objects, object)
 
     new_object = new()
 
@@ -210,12 +210,12 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:destroy, object}, _from, state) do
-    case Context.get(:genesis_entities, object) do
+    case Context.get(:genesis_objects, object) do
       nil ->
         {:reply, :noop, state}
 
       aspects ->
-        Context.remove(:genesis_entities, object)
+        Context.remove(:genesis_objects, object)
         Enum.each(aspects, &Context.remove(aspect_table(&1), object))
         {:reply, :ok, state}
     end
@@ -281,13 +281,13 @@ defmodule Genesis.World do
 
   defp remove_object_aspect(object, aspect) do
     Context.remove(aspect_table(aspect), object)
-    Context.update!(:genesis_entities, object, &without_aspect(&1, aspect))
+    Context.update!(:genesis_objects, object, &without_aspect(&1, aspect))
   end
 
   defp aspect_table(%{__struct__: module}), do: module
 
   defp update_object_aspect(object, new_aspect) do
-    Context.update(:genesis_entities, object, [new_aspect], fn aspects ->
+    Context.update(:genesis_objects, object, [new_aspect], fn aspects ->
       # Make sure we remove any old versions of the aspect
       [new_aspect | without_aspect(aspects, new_aspect)]
     end)
