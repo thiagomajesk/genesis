@@ -1,7 +1,7 @@
 defmodule Genesis.MixProject do
   use Mix.Project
 
-  @version "0.0.1"
+  @version "0.0.2"
   @url "https://github.com/thiagomajesk/genesis"
 
   def project do
