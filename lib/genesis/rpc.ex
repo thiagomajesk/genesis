@@ -1,6 +1,6 @@
 defmodule Genesis.RPC do
   @moduledoc false
-  # The RPC module is responsible for dispatching events to object's aspects.
+  # This module is responsible for dispatching events to object's aspects.
   # It uses a GenServer to handle the dispatching of events, ensuring that events
   # are processed sequentially for the same object (usually the registration order).
   # This module is mainly used by the World GenServer to offload work and avoid deadlocks
@@ -12,6 +12,10 @@ defmodule Genesis.RPC do
     GenServer.start_link(__MODULE__, %{})
   end
 
+  def flush(server, timeout \\ :infinity) do
+    GenServer.call(server, :"$flush", timeout)
+  end
+
   # Dispatches an event to an object and its aspects.
   # The message is expected to be a tuple of 4 elements containing
   # the event name, arguments, the object, and a list of modules for
@@ -21,7 +25,12 @@ defmodule Genesis.RPC do
   end
 
   @impl true
-  def init(_args), do: {:ok, %{}}
+  def init(_args), do: {:ok, %{events: []}}
+
+  @impl true
+  def handle_call(:"$flush", _from, state) do
+    {:reply, Enum.reverse(state.events), %{state | events: []}}
+  end
 
   @impl true
   def handle_cast({event, args, object, modules}, state) do
@@ -32,6 +41,6 @@ defmodule Genesis.RPC do
       end
     end)
 
-    {:noreply, state}
+    {:noreply, Map.update!(state, :events, &[event | &1])}
   end
 end

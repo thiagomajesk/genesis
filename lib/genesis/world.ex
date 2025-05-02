@@ -85,20 +85,28 @@ defmodule Genesis.World do
   end
 
   @doc """
-  Sends a message to an object.
+  Waits for all object events to be processed.
+  Returns a list of the events processed so far.
   """
-  def send(object, message)
-
-  def send(object, {op, aspect}) when op in [:"$attach", :"$remove", :"$update"] do
-    # When sending an event to an object about the creation or removal of an aspect,
-    # we also block to ensure that the respective ETS tables get updated for further consumption.
-    GenServer.call(__MODULE__, {op, object, aspect})
+  def flush(timeout \\ :infinity) do
+    GenServer.call(__MODULE__, :"$flush", timeout)
   end
 
-  def send(object, message) do
+  @doc """
+  Sends a message to an object.
+  """
+  def send(object, event, args \\ %{})
+
+  def send(object, event, aspect) when event in [:"$attach", :"$remove", :"$update"] do
+    # When sending an event to an object about the creation or removal of an aspect,
+    # we also block to ensure that the respective ETS tables get updated for further consumption.
+    GenServer.call(__MODULE__, {event, object, aspect})
+  end
+
+  def send(object, event, args) when is_atom(event) do
     # When sending messages that objects should handle, we don't block.
     # This is by design, because aspect handlers should work independently.
-    GenServer.cast(__MODULE__, {:"$event", object, message})
+    GenServer.cast(__MODULE__, {:"$event", object, {event, args}})
   end
 
   @impl true
@@ -222,6 +230,18 @@ defmodule Genesis.World do
   end
 
   @impl true
+  def handle_call(:"$flush", _from, state) do
+    pids =
+      Genesis.Router
+      |> PartitionSupervisor.which_children()
+      |> Enum.map(fn {_, pid, _type, _} -> pid end)
+
+    Logger.debug("Flushing partitions: #{inspect(pids)}")
+
+    {:reply, Enum.flat_map(pids, &RPC.flush/1), state}
+  end
+
+  @impl true
   def handle_call({:"$attach", object, aspect}, _from, state) do
     upsert_object_aspect(object, aspect)
 
@@ -262,16 +282,18 @@ defmodule Genesis.World do
     # Additionally, the Router (PartitionSupervisor) will guarantee that events are processed
     # in the correct order - Sequentially for the same object, and in parallel for different objects.
     message = {event, args, object, Enum.reverse(modules)}
-    RPC.dispatch({:via, PartitionSupervisor, {Router, object}}, message)
+    RPC.dispatch({:via, PartitionSupervisor, {Genesis.Router, object}}, message)
 
     {:noreply, state}
   end
 
   defp start_router(opts) do
-    # Starts the event router for the World. The Router is the name we use for the partition supervisor
-    # that is responsible for correctly segmenting all object events. See `Genesis.RPC` for more details.
+    # Router is the name we use for the partition supervisor that is responsible
+    # for correctly segmenting all object events. See `Genesis.RPC` for more details.
     partitions = Keyword.get(opts, :partitions, System.schedulers_online())
-    PartitionSupervisor.start_link(child_spec: RPC, name: Router, partitions: partitions)
+
+    spec = Supervisor.child_spec(Genesis.RPC, shutdown: :brutal_kill)
+    PartitionSupervisor.start_link(child_spec: spec, name: Genesis.Router, partitions: partitions)
   end
 
   defp upsert_object_aspect(object, aspect) do

@@ -156,12 +156,12 @@ defmodule Genesis.Aspect do
         do: attach(object, __MODULE__.new(properties))
 
       def attach(object, %{__struct__: __MODULE__} = aspect),
-        do: World.send(object, {:"$attach", aspect})
+        do: World.send(object, :"$attach", aspect)
 
       def remove(object) do
         case Context.get(@table, object) do
           nil -> :noop
-          aspect -> World.send(object, {:"$remove", aspect})
+          aspect -> World.send(object, :"$remove", aspect)
         end
       end
 
@@ -170,7 +170,7 @@ defmodule Genesis.Aspect do
 
         case Context.get(@table, object) do
           nil -> :noop
-          aspect -> World.send(object, {:"$update", Map.merge(aspect, permitted)})
+          aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
         end
       end
 

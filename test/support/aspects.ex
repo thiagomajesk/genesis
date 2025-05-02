@@ -13,7 +13,7 @@ defmodule Genesis.Aspects.Position do
 end
 
 defmodule Genesis.Aspects.Health do
-  use Genesis.Aspect, events: [:take_damage]
+  use Genesis.Aspect, events: [:damage]
 
   prop :current, :integer, required: true
   prop :maximum, :integer, required: false

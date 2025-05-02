@@ -115,6 +115,23 @@ defmodule Genesis.WorldTest do
     assert [] = World.fetch(object)
   end
 
+  test "send/1" do
+    modules = [Health, Moniker, Position]
+    Enum.each(modules, &World.register_aspect/1)
+
+    object = World.new()
+
+    Health.attach(object, current: 100)
+    Position.attach(object, x: 10, y: 20)
+    Moniker.attach(object, name: "Object")
+
+    events = [:move, :damage, :describe]
+
+    Enum.each(events, &World.send(object, &1))
+
+    assert ^events = World.flush()
+  end
+
   describe "prefabs" do
     test "create prefab" do
       modules = [Health, Moniker, Position]
