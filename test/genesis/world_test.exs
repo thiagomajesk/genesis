@@ -129,7 +129,9 @@ defmodule Genesis.WorldTest do
 
     Enum.each(events, &World.send(object, &1))
 
-    assert ^events = World.flush()
+    flushed = Enum.map(events, &{&1, object})
+
+    assert ^flushed = World.flush()
   end
 
   describe "prefabs" do

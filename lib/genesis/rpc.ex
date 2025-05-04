@@ -41,6 +41,6 @@ defmodule Genesis.RPC do
       end
     end)
 
-    {:noreply, Map.update!(state, :events, &[event | &1])}
+    {:noreply, Map.update!(state, :events, &[{event, object} | &1])}
   end
 end
