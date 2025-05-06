@@ -68,7 +68,7 @@ defmodule Genesis.AspectTest do
     Health.attach(object, current: 100)
 
     assert :default = Moniker.get(object, :default)
-    assert %Health{current: 100} = Health.get(object, %Health{})
+    assert %Health{current: 100} = Health.get(object)
   end
 
   test "remove/1" do

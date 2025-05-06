@@ -130,12 +130,6 @@ defmodule Genesis.Aspect do
   @callback handle_event(atom(), object(), map()) ::
               {:cont, map()} | {:halt, map()}
 
-  @doc false
-  defguard is_enum(term) when is_list(term) or is_map(term)
-
-  @doc false
-  defguard is_props(term) when is_enum(term) and not is_struct(term)
-
   defmacro __using__(opts \\ []) do
     quote bind_quoted: [opts: opts] do
       @behaviour Aspect
@@ -144,7 +138,7 @@ defmodule Genesis.Aspect do
       @table __MODULE__
       @events Keyword.get(opts, :events, [])
 
-      import Aspect
+      import Genesis.Value
 
       Module.register_attribute(__MODULE__, :properties, accumulate: true)
 
@@ -195,25 +189,11 @@ defmodule Genesis.Aspect do
     end
   end
 
-  @doc """
-  Defines a property for the aspect.
-  """
-  defmacro prop(name, type, opts \\ []) do
-    quote bind_quoted: [name: name, type: type, opts: opts] do
-      Module.put_attribute(__MODULE__, :properties, {name, type, opts})
-    end
-  end
-
   defmacro __before_compile__(_env) do
     quote do
-      props = Module.get_attribute(__MODULE__, :properties)
+      defstruct to_fields(@properties)
 
-      defstruct Enum.map(props, fn {name, _type, opts} ->
-                  {name, Keyword.get(opts, :default, nil)}
-                end)
-
-      # TODO: Validate attrs accordingly
-      def cast(attrs), do: Enum.into(attrs, %{})
+      def cast(attrs), do: cast(attrs, @properties)
     end
   end
 end
