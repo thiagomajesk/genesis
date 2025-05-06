@@ -5,11 +5,12 @@ defmodule Genesis.AspectTest do
   alias Genesis.Aspects.Health
   alias Genesis.Aspects.Moniker
   alias Genesis.Aspects.Position
+  alias Genesis.Aspects.Selectable
 
   setup do
     pid = start_supervised!(World)
 
-    aspects = [Health, Moniker, Position]
+    aspects = [Health, Moniker, Position, Selectable]
     Enum.each(aspects, &World.register_aspect/1)
 
     {:ok, world: pid, aspects: aspects}
@@ -19,12 +20,14 @@ defmodule Genesis.AspectTest do
     assert %Health{} = Health.new()
     assert %Moniker{} = Moniker.new()
     assert %Position{} = Position.new()
+    assert %Selectable{} = Selectable.new()
   end
 
   test "new/1" do
     assert %Health{current: 100} = Health.new(current: 100)
     assert %Moniker{name: "Object"} = Moniker.new(name: "Object")
     assert %Position{x: 10, y: 20} = Position.new(x: 10, y: 20)
+    assert %Selectable{} = Selectable.new(%{})
   end
 
   describe "attach/1" do

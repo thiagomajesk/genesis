@@ -19,6 +19,11 @@ defmodule Genesis.Aspects.Health do
   prop :maximum, :integer
 end
 
+defmodule Genesis.Aspects.Selectable do
+  use Genesis.Aspect, events: [:select, :deselect]
+  # No properties defined (this will function as a tag)
+end
+
 defmodule Genesis.Aspects.Container do
   use Genesis.Aspect, events: [:open, :close, :add, :remove]
 

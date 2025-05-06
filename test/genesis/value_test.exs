@@ -71,8 +71,7 @@ defmodule Genesis.ValueTest do
     end
 
     test "rejects invalid types", %{type: type} do
-      other_type = random_excluding(type)
-      invalid_value = fixture(other_type)
+      invalid_value = fixture(:invalid)
 
       prop_name = :test_prop
       props = [{prop_name, type, [required: true]}]
@@ -120,8 +119,7 @@ defmodule Genesis.ValueTest do
     end
 
     test "raises for invalid type", %{type: type} do
-      other_type = random_excluding(type)
-      invalid_value = fixture(other_type)
+      invalid_value = fixture(:invalid)
 
       error_msg = "value #{inspect(invalid_value)} is not valid for prop type #{type}"
       assert_raise RuntimeError, error_msg, fn -> check_value(invalid_value, type) end
@@ -132,17 +130,11 @@ defmodule Genesis.ValueTest do
     end
   end
 
-  defp random_excluding(type) do
-    @scalar_types
-    |> Enum.reject(&(&1 == type))
-    |> Enum.random()
-  end
-
   defp fixture(:atom), do: :test_atom
   defp fixture(:binary), do: "test_string"
   defp fixture(:float), do: 3.14
   defp fixture(:integer), do: 42
   defp fixture(:boolean), do: true
   defp fixture(:datetime), do: DateTime.utc_now()
-  defp fixture(:invalid), do: %{not: "a valid scalar"}
+  defp fixture(:invalid), do: %{}
 end

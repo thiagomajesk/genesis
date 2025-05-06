@@ -5,6 +5,7 @@ defmodule Genesis.WorldTest do
   alias Genesis.Aspects.Health
   alias Genesis.Aspects.Moniker
   alias Genesis.Aspects.Position
+  alias Genesis.Aspects.Selectable
 
   setup do
     opts = [aspect_prefix: "Genesis.Aspects"]
@@ -136,7 +137,7 @@ defmodule Genesis.WorldTest do
 
   describe "prefabs" do
     test "create prefab" do
-      modules = [Health, Moniker, Position]
+      modules = [Health, Moniker, Position, Selectable]
       Enum.each(modules, &World.register_aspect/1)
 
       prefab = %{
@@ -144,7 +145,8 @@ defmodule Genesis.WorldTest do
         aspects: [
           %{type: "Health", props: %{current: 50}},
           %{type: "Moniker", props: %{name: "Being"}},
-          %{type: "Position", props: %{x: 10, y: 20}}
+          %{type: "Position", props: %{x: 10, y: 20}},
+          %{type: "Selectable"}
         ]
       }
 
@@ -153,6 +155,7 @@ defmodule Genesis.WorldTest do
       object = World.create("Being")
 
       aspects = [
+        %Selectable{},
         %Health{current: 50},
         %Position{y: 20, x: 10},
         %Moniker{name: "Being"}
@@ -162,7 +165,7 @@ defmodule Genesis.WorldTest do
     end
 
     test "registers children prefab" do
-      modules = [Health, Moniker, Position]
+      modules = [Health, Moniker, Position, Selectable]
       Enum.each(modules, &World.register_aspect/1)
 
       prefab1 = %{
@@ -170,7 +173,8 @@ defmodule Genesis.WorldTest do
         aspects: [
           %{type: "Health", props: %{current: 50}},
           %{type: "Moniker", props: %{name: "Being"}},
-          %{type: "Position", props: %{x: 10, y: 20}}
+          %{type: "Position", props: %{x: 10, y: 20}},
+          %{type: "Selectable"}
         ]
       }
 
@@ -190,6 +194,7 @@ defmodule Genesis.WorldTest do
       object = World.create("Human")
 
       aspects = [
+        %Selectable{},
         %Health{current: 100},
         %Position{x: 100, y: 20},
         %Moniker{name: "John Doe"}

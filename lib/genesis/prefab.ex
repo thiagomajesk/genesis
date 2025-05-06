@@ -13,7 +13,7 @@ defmodule Genesis.Prefab do
     loaded =
       Enum.map(aspects, fn attrs ->
         type = Map.fetch!(attrs, :type)
-        props = Map.fetch!(attrs, :props)
+        props = Map.get(attrs, :props, %{})
         on_conflict = Map.get(attrs, :on_conflict, :merge)
 
         module = ensure_exists!(type, prefix)

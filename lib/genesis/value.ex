@@ -22,6 +22,8 @@ defmodule Genesis.Value do
   @doc """
   Casts the given attrs using the given props definition.
   """
+  def cast(_attrs, []), do: %{}
+
   def cast(attrs, props) do
     attrs
     |> Enum.into(%{})
@@ -31,6 +33,8 @@ defmodule Genesis.Value do
   end
 
   @doc false
+  def to_fields([]), do: []
+
   def to_fields(properties) do
     Enum.map(properties, fn {name, _type, opts} ->
       {name, Keyword.get(opts, :default)}

@@ -146,6 +146,8 @@ defmodule Genesis.Aspect do
 
       def new(attrs \\ []), do: struct!(__MODULE__, cast(attrs))
 
+      def attach(object), do: attach(object, %{})
+
       def attach(object, properties) when is_props(properties),
         do: attach(object, __MODULE__.new(properties))
 
