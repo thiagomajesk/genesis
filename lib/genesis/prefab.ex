@@ -5,20 +5,19 @@ defmodule Genesis.Prefab do
   alias __MODULE__
   alias Genesis.Context
 
-  def load(attrs, prefix) do
+  def load(attrs, registered) do
     name = Map.fetch!(attrs, :name)
     aspects = Map.fetch!(attrs, :aspects)
     inherits = Map.get(attrs, :inherits, [])
 
-    loaded =
-      Enum.map(aspects, fn attrs ->
-        type = Map.fetch!(attrs, :type)
-        props = Map.get(attrs, :props, %{})
-        on_conflict = Map.get(attrs, :on_conflict, :merge)
+    # Create an alias/module lookup from registered aspects
+    lookup = Map.new(registered, &{elem(&1, 1), elem(&1, 0)})
 
-        module = ensure_exists!(type, prefix)
-
-        {module, {on_conflict, props}}
+    declared =
+      Enum.map(aspects, fn {as, props} ->
+        module = Map.fetch!(lookup, as)
+        loaded = Code.ensure_loaded!(module)
+        {loaded, {:merge, props}}
       end)
 
     inherited =
@@ -27,24 +26,15 @@ defmodule Genesis.Prefab do
       |> Enum.flat_map(& &1.aspects)
       |> Enum.map(&{&1.__struct__, {:inherit, Map.from_struct(&1)}})
 
-    merged = merge_aspects(inherited, loaded)
-    final_aspects = Enum.map(merged, fn {m, a} -> m.new(a) end)
+    merged_aspects = merge_aspects(inherited, declared)
+    final_aspects = Enum.map(merged_aspects, fn {module, props} -> module.new(props) end)
+
     %Prefab{name: name, inherit: inherits, aspects: final_aspects}
   end
 
-  defp ensure_exists!(module, prefix) do
-    module = Module.concat(prefix, module)
-    # Using this instead of `Code.ensure_loaded!/1` just so we can have
-    # a more descriptive error message that helps debugging prefab creation.
-    case Code.ensure_loaded(module) do
-      {:module, module} -> module
-      {:error, _} -> raise "The aspect module #{inspect(module)} doesn't exist"
-    end
-  end
-
-  defp merge_aspects(inherited, loaded) do
-    Enum.reduce(inherited ++ loaded, %{}, fn
-      {module, {op, props}}, acc when op in [:inherit, :replace] ->
+  defp merge_aspects(inherited, declared) do
+    Enum.reduce(inherited ++ declared, %{}, fn
+      {module, {:inherit, props}}, acc ->
         Map.put(acc, module, props)
 
       {module, {:merge, props}}, acc ->

@@ -8,8 +8,7 @@ defmodule Genesis.WorldTest do
   alias Genesis.Aspects.Selectable
 
   setup do
-    opts = [aspect_prefix: "Genesis.Aspects"]
-    {:ok, world: start_supervised!({World, opts})}
+    {:ok, world: start_supervised!(World)}
   end
 
   test "new/0" do
@@ -136,17 +135,51 @@ defmodule Genesis.WorldTest do
   end
 
   describe "prefabs" do
-    test "create prefab" do
+    test "create prefab with map and default alias" do
       modules = [Health, Moniker, Position, Selectable]
       Enum.each(modules, &World.register_aspect/1)
 
       prefab = %{
         name: "Being",
+        aspects: %{
+          "health" => %{current: 100},
+          "moniker" => %{name: "Being"},
+          "position" => %{x: 10, y: 20},
+          "selectable" => %{}
+        }
+      }
+
+      World.register_prefab(prefab)
+
+      object = World.create("Being")
+
+      aspects = [
+        %Selectable{},
+        %Health{current: 100},
+        %Position{y: 20, x: 10},
+        %Moniker{name: "Being"}
+      ]
+
+      assert ^aspects = World.fetch(object)
+    end
+
+    test "create prefab with list with alias" do
+      modules = [
+        {"prefix::health", Health},
+        {"prefix::moniker", Moniker},
+        {"prefix::position", Position},
+        {"prefix::selectable", Selectable}
+      ]
+
+      Enum.each(modules, &World.register_aspect/1)
+
+      prefab = %{
+        name: "Being",
         aspects: [
-          %{type: "Health", props: %{current: 50}},
-          %{type: "Moniker", props: %{name: "Being"}},
-          %{type: "Position", props: %{x: 10, y: 20}},
-          %{type: "Selectable"}
+          {"prefix::health", %{current: 100}},
+          {"prefix::moniker", %{name: "Being"}},
+          {"prefix::position", %{x: 10, y: 20}},
+          {"prefix::selectable", %{}}
         ]
       }
 
@@ -156,7 +189,41 @@ defmodule Genesis.WorldTest do
 
       aspects = [
         %Selectable{},
-        %Health{current: 50},
+        %Health{current: 100},
+        %Position{y: 20, x: 10},
+        %Moniker{name: "Being"}
+      ]
+
+      assert ^aspects = World.fetch(object)
+    end
+
+    test "create prefab with keyword list" do
+      modules = [
+        health: Health,
+        moniker: Moniker,
+        position: Position,
+        selectable: Selectable
+      ]
+
+      Enum.each(modules, &World.register_aspect/1)
+
+      prefab = %{
+        name: "Being",
+        aspects: [
+          health: %{current: 100},
+          moniker: %{name: "Being"},
+          position: %{x: 10, y: 20},
+          selectable: %{}
+        ]
+      }
+
+      World.register_prefab(prefab)
+
+      object = World.create("Being")
+
+      aspects = [
+        %Selectable{},
+        %Health{current: 100},
         %Position{y: 20, x: 10},
         %Moniker{name: "Being"}
       ]
@@ -170,22 +237,22 @@ defmodule Genesis.WorldTest do
 
       prefab1 = %{
         name: "Being",
-        aspects: [
-          %{type: "Health", props: %{current: 50}},
-          %{type: "Moniker", props: %{name: "Being"}},
-          %{type: "Position", props: %{x: 10, y: 20}},
-          %{type: "Selectable"}
-        ]
+        aspects: %{
+          "health" => %{current: 100, maximum: 100},
+          "moniker" => %{name: "Being"},
+          "position" => %{x: 10, y: 20},
+          "selectable" => %{}
+        }
       }
 
       prefab2 = %{
         name: "Human",
         inherits: ["Being"],
-        aspects: [
-          %{type: "Health", props: %{current: 100}},
-          %{type: "Moniker", props: %{name: "John Doe"}, on_conflict: :replace},
-          %{type: "Position", props: %{x: 100}, on_conflict: :merge}
-        ]
+        aspects: %{
+          "health" => %{current: 50},
+          "moniker" => %{name: "John Doe"},
+          "position" => %{x: 100, y: 200}
+        }
       }
 
       World.register_prefab(prefab1)
@@ -195,8 +262,8 @@ defmodule Genesis.WorldTest do
 
       aspects = [
         %Selectable{},
-        %Health{current: 100},
-        %Position{x: 100, y: 20},
+        %Health{current: 50, maximum: 100},
+        %Position{x: 100, y: 200},
         %Moniker{name: "John Doe"}
       ]
 

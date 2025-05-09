@@ -47,10 +47,16 @@ defmodule Genesis.World do
   @doc """
   Registers an aspect module.
   """
-  def register_aspect(module) do
+  def register_aspect(module_or_tuple)
+
+  def register_aspect(module) when is_atom(module) do
+    register_aspect({module_alias(module), module})
+  end
+
+  def register_aspect({as, module}) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
-    GenServer.call(__MODULE__, {:register_aspect, module})
+    GenServer.call(__MODULE__, {:register_aspect, {as, module}})
   end
 
   @doc """
@@ -135,7 +141,7 @@ defmodule Genesis.World do
     Context.drop(:genesis_prefabs)
     Context.drop(:genesis_objects)
 
-    Enum.each(state.aspects, &Context.drop(elem(&1, 0)))
+    Enum.each(state.aspects, &Context.drop(elem(&1, 2)))
 
     Logger.info("Terminating World: #{inspect(reason)}")
   end
@@ -157,27 +163,27 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:register_aspect, module}, _from, state) do
+  def handle_call({:register_aspect, {as, module}}, _from, state) do
     if not is_aspect?(module), do: raise("Invalid aspect #{inspect(module)}")
 
     {table, events} = module.init()
 
     events_lookup =
       Enum.reduce(events, state.events_lookup, fn event, lookup ->
-        Map.update(lookup, event, [table], &[table | &1])
+        Map.update(lookup, event, [module], &[module | &1])
       end)
 
     state =
       state
       |> Map.put(:events_lookup, events_lookup)
-      |> Map.update!(:aspects, &[{table, events} | &1])
+      |> Map.update!(:aspects, &[{module, as, table, events} | &1])
 
     {:reply, :ok, state}
   end
 
   @impl true
   def handle_call({:register_prefab, attrs}, _from, state) do
-    prefab = Prefab.load(attrs, state.aspect_prefix)
+    prefab = Prefab.load(attrs, state.aspects)
     Context.add(:genesis_prefabs, prefab.name, prefab)
 
     {:reply, :ok, state}
@@ -322,5 +328,13 @@ defmodule Genesis.World do
   defp is_aspect?(module) do
     attributes = module.__info__(:attributes)
     Aspect in Access.get(attributes, :behaviour, [])
+  end
+
+  defp module_alias(module) do
+    module
+    |> Module.split()
+    |> List.last()
+    |> to_string()
+    |> String.downcase()
   end
 end
