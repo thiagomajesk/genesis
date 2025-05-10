@@ -6,6 +6,7 @@ defmodule Genesis.Aspect do
   alias __MODULE__
   alias Genesis.World
   alias Genesis.Context
+  alias Genesis.Naming
 
   require Logger
 
@@ -135,14 +136,16 @@ defmodule Genesis.Aspect do
       @behaviour Aspect
       @before_compile Aspect
 
-      @table __MODULE__
       @events Keyword.get(opts, :events, [])
 
       import Genesis.Value
 
       Module.register_attribute(__MODULE__, :properties, accumulate: true)
 
-      def init(), do: {Context.init(@table), @events}
+      def init() do
+        table = Naming.table(__MODULE__)
+        {Context.init(table), @events}
+      end
 
       def new(attrs \\ []), do: struct!(__MODULE__, cast(attrs))
 
@@ -155,7 +158,9 @@ defmodule Genesis.Aspect do
         do: World.send(object, :"$attach", aspect)
 
       def remove(object) do
-        case Context.get(@table, object) do
+        table = Naming.table(__MODULE__)
+
+        case Context.get(table, object) do
           nil -> :noop
           aspect -> World.send(object, :"$remove", aspect)
         end
@@ -164,26 +169,45 @@ defmodule Genesis.Aspect do
       def update(object, properties) when is_props(properties) do
         permitted = cast(properties)
 
-        case Context.get(@table, object) do
+        table = Naming.table(__MODULE__)
+
+        case Context.get(table, object) do
           nil -> :noop
           aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
         end
       end
 
-      def get(object, default \\ nil),
-        do: Context.get(@table, object, default)
+      def get(object, default \\ nil) do
+        table = Naming.table(__MODULE__)
+        Context.get(table, object, default)
+      end
 
-      def all(), do: Context.all(@table)
+      def all(), do: Context.all(Naming.table(__MODULE__))
 
-      def exists?(object), do: Context.exists?(@table, object)
+      def exists?(object) do
+        table = Naming.table(__MODULE__)
+        Context.exists?(table, object)
+      end
 
-      def at_least(property, min), do: Context.at_least(@table, property, min)
+      def at_least(property, min) do
+        table = Naming.table(__MODULE__)
+        Context.at_least(table, property, min)
+      end
 
-      def at_most(property, max), do: Context.at_most(@table, property, max)
+      def at_most(property, max) do
+        table = Naming.table(__MODULE__)
+        Context.at_most(table, property, max)
+      end
 
-      def between(property, min, max), do: Context.between(@table, property, min, max)
+      def between(property, min, max) do
+        table = Naming.table(__MODULE__)
+        Context.between(table, property, min, max)
+      end
 
-      def match(properties) when is_props(properties), do: Context.match(@table, properties)
+      def match(properties) when is_props(properties) do
+        table = Naming.table(__MODULE__)
+        Context.match(table, properties)
+      end
 
       def handle_event(event, _object, args), do: {:cont, args}
 

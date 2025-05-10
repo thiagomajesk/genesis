@@ -10,6 +10,7 @@ defmodule Genesis.World do
   alias Genesis.Aspect
   alias Genesis.Context
   alias Genesis.Prefab
+  alias Genesis.Naming
 
   require Logger
 
@@ -17,7 +18,8 @@ defmodule Genesis.World do
   Starts the World process.
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    server = Naming.server(__MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: server)
   end
 
   @doc """
@@ -28,20 +30,22 @@ defmodule Genesis.World do
   @doc """
   Fetches the aspects of an object.
   """
-  def fetch(object), do: Context.all(:genesis_objects, object)
+  def fetch(object), do: Context.all(Naming.table(:objects), object)
 
   @doc """
   List all aspects registered in the world.
   """
   def list_aspects() do
-    GenServer.call(__MODULE__, :list_aspects)
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, :list_aspects)
   end
 
   @doc """
   List all objects spawned in the world.
   """
   def list_objects() do
-    GenServer.call(__MODULE__, :list_objects)
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, :list_objects)
   end
 
   @doc """
@@ -50,13 +54,14 @@ defmodule Genesis.World do
   def register_aspect(module_or_tuple)
 
   def register_aspect(module) when is_atom(module) do
-    register_aspect({module_alias(module), module})
+    register_aspect({Naming.alias(module), module})
   end
 
   def register_aspect({as, module}) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
-    GenServer.call(__MODULE__, {:register_aspect, {as, module}})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {:register_aspect, {as, module}})
   end
 
   @doc """
@@ -65,7 +70,8 @@ defmodule Genesis.World do
   def register_prefab(attrs) do
     # We want the server to block registration calls to ensure
     # that the table is created before other process tries to access it.
-    GenServer.call(__MODULE__, {:register_prefab, attrs})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {:register_prefab, attrs})
   end
 
   @doc """
@@ -73,21 +79,24 @@ defmodule Genesis.World do
   The prefab must be registered in the World before it can be used.
   """
   def create(prefab) do
-    GenServer.call(__MODULE__, {:create, prefab})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {:create, prefab})
   end
 
   @doc """
   Clones an object with all the aspects as the original object.
   """
   def clone(object) do
-    GenServer.call(__MODULE__, {:clone, object})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {:clone, object})
   end
 
   @doc """
   Destroys an object from the world.
   """
   def destroy(object) do
-    GenServer.call(__MODULE__, {:destroy, object})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {:destroy, object})
   end
 
   @doc """
@@ -95,7 +104,8 @@ defmodule Genesis.World do
   Returns a list of the events processed so far.
   """
   def flush(timeout \\ :infinity) do
-    GenServer.call(__MODULE__, :"$flush", timeout)
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, :"$flush", timeout)
   end
 
   @doc """
@@ -106,50 +116,40 @@ defmodule Genesis.World do
   def send(object, event, aspect) when event in [:"$attach", :"$remove", :"$update"] do
     # When sending an event to an object about the creation or removal of an aspect,
     # we also block to ensure that the respective ETS tables get updated for further consumption.
-    GenServer.call(__MODULE__, {event, object, aspect})
+    server = Naming.server(__MODULE__)
+    GenServer.call(server, {event, object, aspect})
   end
 
   def send(object, event, args) when is_atom(event) do
     # When sending messages that objects should handle, we don't block.
     # This is by design, because aspect handlers should work independently.
-    GenServer.cast(__MODULE__, {:"$event", object, {event, args}})
+    server = Naming.server(__MODULE__)
+    GenServer.cast(server, {:"$event", object, {event, args}})
   end
 
   @impl true
   def init(opts) do
     start_router(opts)
 
-    Context.init(:genesis_prefabs)
-    Context.init(:genesis_objects)
-
-    # Aspects modules prefix used when loading prefabs.
-    # By default it is set to "Elixir" to match the default module namespace.
-    # This can be overridden in the config or so prefabs can use shorter names.
-    aspect_prefix = Keyword.get(opts, :aspect_prefix, "Elixir")
+    Context.init(Naming.table(:objects))
+    Context.init(Naming.table(:prefabs))
 
     state = %{
       aspects: [],
-      events_lookup: %{},
-      aspect_prefix: aspect_prefix
+      events_lookup: %{}
     }
 
-    {:ok, state, {:continue, :setup}}
+    {:ok, state}
   end
 
   @impl true
   def terminate(reason, state) do
-    Context.drop(:genesis_prefabs)
-    Context.drop(:genesis_objects)
+    Context.drop(Naming.table(:objects))
+    Context.drop(Naming.table(:prefabs))
 
     Enum.each(state.aspects, &Context.drop(elem(&1, 2)))
 
     Logger.info("Terminating World: #{inspect(reason)}")
-  end
-
-  @impl true
-  def handle_continue(:setup, state) do
-    # TODO: Load entities, etc.
-    {:noreply, state}
   end
 
   @impl true
@@ -159,13 +159,15 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call(:list_objects, _from, state) do
-    {:reply, Context.all(:genesis_objects), state}
+    {:reply, Context.all(Naming.table(:objects)), state}
   end
 
   @impl true
   def handle_call({:register_aspect, {as, module}}, _from, state) do
     if not is_aspect?(module), do: raise("Invalid aspect #{inspect(module)}")
 
+    # The table name here is mostly used for debugging purposes.
+    # We use the `Naming.table(module) to get the proper table name.
     {table, events} = module.init()
 
     events_lookup =
@@ -184,14 +186,15 @@ defmodule Genesis.World do
   @impl true
   def handle_call({:register_prefab, attrs}, _from, state) do
     prefab = Prefab.load(attrs, state.aspects)
-    Context.add(:genesis_prefabs, prefab.name, prefab)
+
+    Context.add(Naming.table(:prefabs), prefab.name, prefab)
 
     {:reply, :ok, state}
   end
 
   @impl true
   def handle_call({:create, prefab}, _from, state) do
-    case Context.get(:genesis_prefabs, prefab) do
+    case Context.get(Naming.table(:prefabs), prefab) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
@@ -209,7 +212,7 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:clone, object}, _from, state) do
-    aspects = Context.get(:genesis_objects, object)
+    aspects = Context.get(Naming.table(:objects), object)
 
     new_object = new()
 
@@ -224,13 +227,13 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:destroy, object}, _from, state) do
-    case Context.get(:genesis_objects, object) do
+    case Context.get(Naming.table(:objects), object) do
       nil ->
         {:reply, :noop, state}
 
       aspects ->
-        Context.remove(:genesis_objects, object)
-        Enum.each(aspects, &Context.remove(aspect_table(&1), object))
+        Context.remove(Naming.table(:objects), object)
+        Enum.each(aspects, &Context.remove(Naming.table(&1), object))
         {:reply, :ok, state}
     end
   end
@@ -304,18 +307,16 @@ defmodule Genesis.World do
 
   defp upsert_object_aspect(object, aspect) do
     update_object_aspect(object, aspect)
-    Context.add(aspect_table(aspect), object, aspect)
+    Context.add(Naming.table(aspect), object, aspect)
   end
 
   defp remove_object_aspect(object, aspect) do
-    Context.remove(aspect_table(aspect), object)
-    Context.update!(:genesis_objects, object, &without_aspect(&1, aspect))
+    Context.remove(Naming.table(aspect), object)
+    Context.update!(Naming.table(:objects), object, &without_aspect(&1, aspect))
   end
 
-  defp aspect_table(%{__struct__: module}), do: module
-
   defp update_object_aspect(object, new_aspect) do
-    Context.update(:genesis_objects, object, [new_aspect], fn aspects ->
+    Context.update(Naming.table(:objects), object, [new_aspect], fn aspects ->
       # Make sure we remove any old versions of the aspect
       [new_aspect | without_aspect(aspects, new_aspect)]
     end)
@@ -328,13 +329,5 @@ defmodule Genesis.World do
   defp is_aspect?(module) do
     attributes = module.__info__(:attributes)
     Aspect in Access.get(attributes, :behaviour, [])
-  end
-
-  defp module_alias(module) do
-    module
-    |> Module.split()
-    |> List.last()
-    |> to_string()
-    |> String.downcase()
   end
 end

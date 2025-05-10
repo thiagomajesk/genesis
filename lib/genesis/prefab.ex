@@ -4,6 +4,7 @@ defmodule Genesis.Prefab do
 
   alias __MODULE__
   alias Genesis.Context
+  alias Genesis.Naming
 
   def load(attrs, registered) do
     name = Map.fetch!(attrs, :name)
@@ -22,7 +23,7 @@ defmodule Genesis.Prefab do
 
     inherited =
       inherits
-      |> Enum.map(&Context.get!(:genesis_prefabs, &1))
+      |> Enum.map(&Context.get!(Naming.table(:prefabs), &1))
       |> Enum.flat_map(& &1.aspects)
       |> Enum.map(&{&1.__struct__, {:inherit, Map.from_struct(&1)}})
 
