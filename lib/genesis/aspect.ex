@@ -8,8 +8,6 @@ defmodule Genesis.Aspect do
   alias Genesis.Context
   alias Genesis.Naming
 
-  require Logger
-
   @type object :: integer() | atom() | binary()
   @type props :: Enumerable.t()
 
