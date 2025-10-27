@@ -41,6 +41,12 @@ defmodule Genesis.Aspect do
   @callback update(object(), props()) :: :ok | :noop
 
   @doc """
+  Updates a specific property of an aspect attached to the object.
+  Will return `:noop` if the aspect is not present or `error` if the property does not exist.
+  """
+  @callback update(object(), atom(), fun()) :: :ok | :noop | :error
+
+  @doc """
   Removes an aspect from an object.
   Returns `:noop`  if the aspect is not present.
   """
@@ -172,6 +178,21 @@ defmodule Genesis.Aspect do
         case Context.get(table, object) do
           nil -> :noop
           aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
+        end
+      end
+
+      def update(object, property, fun) when is_atom(property) and is_function(fun, 1) do
+        table = Naming.table(__MODULE__)
+
+        case Context.get(table, object) do
+          nil ->
+            :noop
+
+          %{^property => value} = aspect ->
+            World.send(object, :"$update", Map.put(aspect, property, fun.(value)))
+
+          _aspect ->
+            :error
         end
       end
 

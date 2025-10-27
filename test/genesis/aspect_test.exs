@@ -92,6 +92,18 @@ defmodule Genesis.AspectTest do
 
     Health.update(object, current: 50)
     assert %Health{current: 50} = Health.get(object)
+    assert :noop = Moniker.update(object, name: "New Name")
+  end
+
+  test "update/3" do
+    object = World.new()
+
+    Health.attach(object, current: 100)
+
+    Health.update(object, :current, &(&1 - 25))
+    assert %Health{current: 75} = Health.get(object)
+    assert :noop = Moniker.update(object, name: "New Name")
+    assert :error = Health.update(object, :foo, &(&1 + 10))
   end
 
   test "all/1" do
