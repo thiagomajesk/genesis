@@ -9,7 +9,7 @@ defmodule Genesis.RPC do
   use GenServer
 
   def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{})
+    GenServer.start_link(__MODULE__, %{}, hibernate_after: 5_000)
   end
 
   def flush(server, timeout \\ :infinity) do
