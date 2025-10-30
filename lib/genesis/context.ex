@@ -12,11 +12,11 @@ defmodule Genesis.Context do
   end
 
   def drop(table) do
-    :ets.delete(table) && :ok
+    with true <- :ets.delete(table), do: :ok
   end
 
   def add(table, key, value) do
-    :ets.insert(table, {key, value}) && :ok
+    with true <- :ets.insert(table, {key, value}), do: :ok
   end
 
   def get(table, key, default \\ nil) do
@@ -34,7 +34,7 @@ defmodule Genesis.Context do
   end
 
   def remove(table, key) do
-    :ets.delete(table, key)
+    with true <- :ets.delete(table, key), do: :ok
   end
 
   def update(table, key, default, fun) when is_function(fun, 1) do
