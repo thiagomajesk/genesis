@@ -2,7 +2,13 @@ defmodule Genesis.Context do
   @moduledoc false
 
   def init(table) do
-    :ets.new(table, [:named_table, :set, write_concurrency: true])
+    with :undefined <- :ets.whereis(table) do
+      :ets.new(table, [
+        :set,
+        :named_table,
+        write_concurrency: true
+      ])
+    end
   end
 
   def drop(table) do
