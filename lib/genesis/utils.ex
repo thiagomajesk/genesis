@@ -1,7 +1,7 @@
 defmodule Genesis.Utils do
   @moduledoc false
 
-  def alias(module) do
+  def aliasify(module) when is_atom(module) do
     module
     |> Module.split()
     |> List.last()

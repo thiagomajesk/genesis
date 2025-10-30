@@ -50,7 +50,7 @@ defmodule Genesis.World do
   def register_aspect(module_or_tuple)
 
   def register_aspect(module) when is_atom(module) do
-    register_aspect({Genesis.Utils.alias(module), module})
+    register_aspect({Genesis.Utils.aliasify(module), module})
   end
 
   def register_aspect({as, module}) do
