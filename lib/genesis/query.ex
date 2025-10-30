@@ -4,7 +4,6 @@ defmodule Genesis.Query do
   """
 
   alias Genesis.Context
-  alias Genesis.Naming
 
   @doc """
   Returns a list of objects that have all the aspects specified in the list.
@@ -17,8 +16,7 @@ defmodule Genesis.Query do
   def all_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :objects
-    |> Naming.table()
+    :genesis_objects
     |> Context.stream()
     |> apply_filter(:all, modules_lookup)
     |> Enum.to_list()
@@ -35,8 +33,7 @@ defmodule Genesis.Query do
   def any_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :objects
-    |> Naming.table()
+    :genesis_objects
     |> Context.stream()
     |> apply_filter(:any, modules_lookup)
     |> Enum.to_list()
@@ -53,8 +50,7 @@ defmodule Genesis.Query do
   def none_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :objects
-    |> Naming.table()
+    :genesis_objects
     |> Context.stream()
     |> apply_filter(:none, modules_lookup)
     |> Enum.to_list()
@@ -78,8 +74,7 @@ defmodule Genesis.Query do
     any_lookup = any && MapSet.new(any)
     none_lookup = none && MapSet.new(none)
 
-    :objects
-    |> Naming.table()
+    :genesis_objects
     |> Context.stream()
     |> apply_filter(:all, all_lookup)
     |> apply_filter(:any, any_lookup)

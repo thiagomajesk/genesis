@@ -6,7 +6,6 @@ defmodule Genesis.Aspect do
   alias __MODULE__
   alias Genesis.World
   alias Genesis.Context
-  alias Genesis.Naming
 
   @type object :: integer() | atom() | binary()
   @type props :: Enumerable.t()
@@ -147,8 +146,7 @@ defmodule Genesis.Aspect do
       Module.register_attribute(__MODULE__, :properties, accumulate: true)
 
       def init() do
-        table = Naming.table(__MODULE__)
-        {Context.init(table), @events}
+        {Context.init(__MODULE__), @events}
       end
 
       def new(attrs \\ []), do: struct!(__MODULE__, cast(attrs))
@@ -162,9 +160,7 @@ defmodule Genesis.Aspect do
         do: World.send(object, :"$attach", aspect)
 
       def remove(object) do
-        table = Naming.table(__MODULE__)
-
-        case Context.get(table, object) do
+        case Context.get(__MODULE__, object) do
           nil -> :noop
           aspect -> World.send(object, :"$remove", aspect)
         end
@@ -173,18 +169,14 @@ defmodule Genesis.Aspect do
       def update(object, properties) when is_props(properties) do
         permitted = cast(properties)
 
-        table = Naming.table(__MODULE__)
-
-        case Context.get(table, object) do
+        case Context.get(__MODULE__, object) do
           nil -> :noop
           aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
         end
       end
 
       def update(object, property, fun) when is_atom(property) and is_function(fun, 1) do
-        table = Naming.table(__MODULE__)
-
-        case Context.get(table, object) do
+        case Context.get(__MODULE__, object) do
           nil ->
             :noop
 
@@ -197,35 +189,29 @@ defmodule Genesis.Aspect do
       end
 
       def get(object, default \\ nil) do
-        table = Naming.table(__MODULE__)
-        Context.get(table, object, default)
+        Context.get(__MODULE__, object, default)
       end
 
-      def all(), do: Context.all(Naming.table(__MODULE__))
+      def all(), do: Context.all(__MODULE__)
 
       def exists?(object) do
-        table = Naming.table(__MODULE__)
-        Context.exists?(table, object)
+        Context.exists?(__MODULE__, object)
       end
 
       def at_least(property, min) do
-        table = Naming.table(__MODULE__)
-        Context.at_least(table, property, min)
+        Context.at_least(__MODULE__, property, min)
       end
 
       def at_most(property, max) do
-        table = Naming.table(__MODULE__)
-        Context.at_most(table, property, max)
+        Context.at_most(__MODULE__, property, max)
       end
 
       def between(property, min, max) do
-        table = Naming.table(__MODULE__)
-        Context.between(table, property, min, max)
+        Context.between(__MODULE__, property, min, max)
       end
 
       def match(properties) when is_props(properties) do
-        table = Naming.table(__MODULE__)
-        Context.match(table, properties)
+        Context.match(__MODULE__, properties)
       end
 
       def handle_event(event, _object, args), do: {:cont, args}
