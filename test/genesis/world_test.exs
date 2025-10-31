@@ -8,7 +8,7 @@ defmodule Genesis.WorldTest do
   alias Genesis.Aspects.Selectable
 
   setup do
-    {:ok, world: start_supervised!(World)}
+    on_exit(fn -> World.reset() end)
   end
 
   test "new/0" do

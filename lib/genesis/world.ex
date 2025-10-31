@@ -99,6 +99,13 @@ defmodule Genesis.World do
   end
 
   @doc """
+  Resets the world state by destroying all objects.
+  """
+  def reset(timeout \\ :infinity) do
+    GenServer.call(__MODULE__, :"$reset", timeout)
+  end
+
+  @doc """
   Sends a message to an object.
   """
   def send(object, event, args \\ %{})
@@ -116,28 +123,11 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def init(opts) do
-    start_router(opts)
-
+  def init(_opts) do
     Context.init(:genesis_objects)
     Context.init(:genesis_prefabs)
 
-    state = %{
-      aspects: [],
-      events_lookup: %{}
-    }
-
-    {:ok, state}
-  end
-
-  @impl true
-  def terminate(reason, state) do
-    Context.drop(:genesis_objects)
-    Context.drop(:genesis_prefabs)
-
-    Enum.each(state.aspects, fn {_aspect, _alias, table, _events} -> Context.drop(table) end)
-
-    Logger.info("Terminating World: #{inspect(reason)}")
+    {:ok, %{aspects: [], events_lookup: %{}}}
   end
 
   @impl true
@@ -237,6 +227,15 @@ defmodule Genesis.World do
   end
 
   @impl true
+  def handle_call(:"$reset", _from, state) do
+    :ets.delete_all_objects(:genesis_objects)
+
+    Enum.each(state.aspects, fn {_, _, table, _} -> Context.drop(table) end)
+
+    {:reply, :ok, %{aspects: [], events_lookup: %{}}}
+  end
+
+  @impl true
   def handle_call({:"$attach", object, aspect}, _from, state) do
     upsert_object_aspect(object, aspect)
 
@@ -280,15 +279,6 @@ defmodule Genesis.World do
     RPC.dispatch({:via, PartitionSupervisor, {Genesis.Router, object}}, message)
 
     {:noreply, state}
-  end
-
-  defp start_router(opts) do
-    # Router is the name we use for the partition supervisor that is responsible
-    # for correctly segmenting all object events. See `Genesis.RPC` for more details.
-    partitions = Keyword.get(opts, :partitions, System.schedulers_online())
-
-    spec = Supervisor.child_spec(Genesis.RPC, shutdown: :brutal_kill)
-    PartitionSupervisor.start_link(child_spec: spec, name: Genesis.Router, partitions: partitions)
   end
 
   defp upsert_object_aspect(object, aspect) do

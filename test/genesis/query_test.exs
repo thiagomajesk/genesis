@@ -8,12 +8,10 @@ defmodule Genesis.QueryTest do
   alias Genesis.Aspects.Position
 
   setup do
-    pid = start_supervised!(World)
-
+    on_exit(fn -> World.reset() end)
     aspects = [Health, Moniker, Position]
     Enum.each(aspects, &World.register_aspect/1)
-
-    {:ok, world: pid, aspects: aspects}
+    {:ok, aspects: aspects}
   end
 
   test "all_of/1" do

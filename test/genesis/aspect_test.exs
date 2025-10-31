@@ -8,12 +8,10 @@ defmodule Genesis.AspectTest do
   alias Genesis.Aspects.Selectable
 
   setup do
-    pid = start_supervised!(World)
-
+    on_exit(fn -> World.reset() end)
     aspects = [Health, Moniker, Position, Selectable]
     Enum.each(aspects, &World.register_aspect/1)
-
-    {:ok, world: pid, aspects: aspects}
+    {:ok, aspects: aspects}
   end
 
   test "new/0" do
