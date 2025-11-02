@@ -14,7 +14,7 @@ defmodule Genesis.Aspect do
   Initializes the aspect ETS table.
   Should return an atom with the name of the table and a list of events.
   """
-  @callback init() :: {atom() | list(atom())}
+  @callback init() :: {:ets.tid(), list(atom())}
 
   @doc """
   Creates a new aspect by casting the given properties.
