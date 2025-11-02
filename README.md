@@ -21,6 +21,22 @@ def deps do
 end
 ```
 
+## Benchmarking
+
+There's a benchmarking script available to measure how the library performs under load. You can run it before deciding if it fits your use case or not. The script will output information about the processes spawned and BEAM statistics to help you understand resource usage.
+
+**Parameters**:
+- `--objects`: The total number of objects to create
+- `--duration`: How long to run the benchmark (in seconds)
+- `--interval`: Interval to send events to objects (in milliseconds)
+
+```bash
+# or mix run bench.exs --o 1000 --d 10 --i 10
+mix run bench.exs --objects 1000 --duration 10 --interval 10
+```
+
+> The example above will simulate a scenario where a thousand objects receives a single event every 10 milliseconds during the period of 10 seconds.
+
 ## Special Thanks ❤️
 
 A big thanks to both Brian Bucklew and Thomas Biskup for the inspiring talks. The Caves of Qud modding guides in particular was a great resource to see what this architecture would be capable of.
