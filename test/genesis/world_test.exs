@@ -64,17 +64,44 @@ defmodule Genesis.WorldTest do
     end
   end
 
-  test "list_objects/0" do
-    modules = [Health, Moniker, Position]
-    Enum.each(modules, &World.register_aspect/1)
+  describe "list_objects" do
+    test "with aspects as list" do
+      modules = [Health, Moniker, Position]
+      Enum.each(modules, &World.register_aspect/1)
 
-    object = World.new()
+      object = World.new()
 
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
+      Health.attach(object, current: 100)
+      Position.attach(object, x: 10, y: 20)
+      Moniker.attach(object, name: "Object")
 
-    assert [{^object, _}] = World.list_objects()
+      assert [{^object, aspects}] = World.list_objects(aspects_as: :list)
+
+      assert [
+               %Moniker{name: "Object"},
+               %Position{x: 10, y: 20},
+               %Health{current: 100}
+             ] = aspects
+    end
+
+    test "with aspects as map" do
+      modules = [Health, Moniker, Position]
+      Enum.each(modules, &World.register_aspect/1)
+
+      object = World.new()
+
+      Health.attach(object, current: 100)
+      Position.attach(object, x: 10, y: 20)
+      Moniker.attach(object, name: "Object")
+
+      assert [{^object, aspects}] = World.list_objects(aspects_as: :map)
+
+      assert %{
+               "health" => %{maximum: nil, current: 100},
+               "moniker" => %{name: "Object", description: nil},
+               "position" => %{y: 20, x: 10}
+             } = aspects
+    end
   end
 
   test "clone/1" do

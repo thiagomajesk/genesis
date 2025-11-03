@@ -44,8 +44,9 @@ defmodule Genesis.World do
   @doc """
   List all objects spawned in the world.
   """
-  def list_objects() do
-    GenServer.call(__MODULE__, :list_objects)
+  def list_objects(opts \\ []) do
+    format = Keyword.get(opts, :aspects_as, :list)
+    GenServer.call(__MODULE__, {:list_objects, format})
   end
 
   @doc """
@@ -140,8 +141,25 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call(:list_objects, _from, state) do
+  def handle_call({:list_objects, :list}, _from, state) do
     {:reply, Context.all(:genesis_objects), state}
+  end
+
+  @impl true
+  def handle_call({:list_objects, :map}, _from, state) do
+    stream = Context.stream(:genesis_objects)
+
+    objects =
+      Enum.map(stream, fn {object, aspects} ->
+        {object,
+         Map.new(aspects, fn aspect ->
+           # TODO: Get alias from registered aspects
+           name = Genesis.Utils.aliasify(aspect.__struct__)
+           {name, Map.from_struct(aspect)}
+         end)}
+      end)
+
+    {:reply, objects, state}
   end
 
   @impl true
