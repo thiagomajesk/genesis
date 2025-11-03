@@ -35,12 +35,18 @@ defmodule Genesis.RPC do
   @impl true
   def handle_cast({event, args, object, modules}, state) do
     Enum.reduce_while(modules, args, fn module, args ->
-      case module.handle_event(event, object, args) do
+      case maybe_handle_event(module, event, object, args) do
         {resp, args} when resp in [:cont, :halt] -> {resp, args}
         other -> raise "Invalid response #{inspect(other)} from #{inspect(module)}"
       end
     end)
 
     {:noreply, Map.update!(state, :events, &[{event, object} | &1])}
+  end
+
+  defp maybe_handle_event(module, event, object, args) do
+    if function_exported?(module, :handle_event, 3),
+      do: module.handle_event(event, object, args),
+      else: {:cont, args}
   end
 end

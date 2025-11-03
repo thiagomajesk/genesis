@@ -10,6 +10,8 @@ defmodule Genesis.Aspect do
   @type object :: integer() | atom() | binary()
   @type props :: Enumerable.t()
 
+  @optional_callbacks handle_event: 3
+
   @doc """
   Initializes the aspect ETS table.
   Should return an atom with the name of the table and a list of events.
@@ -215,15 +217,23 @@ defmodule Genesis.Aspect do
         Context.match(@table_name, properties)
       end
 
-      def handle_event(event, _object, args), do: {:cont, args}
-
-      defoverridable handle_event: 3, new: 0, new: 1
+      defoverridable new: 0, new: 1
     end
   end
 
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
     quote do
       defstruct to_fields(@properties)
+
+      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 3}) do
+        raise CompileError,
+          file: unquote(env.file),
+          line: unquote(env.line),
+          description: """
+          Aspect #{unquote(env.module)} defines handle_event/3 but does not specify any events.
+          Please specify the events this aspect handles using `use Genesis.Aspect, events: [:event1, :event2]`.
+          """
+      end
 
       def cast(attrs), do: cast(attrs, @properties)
     end
