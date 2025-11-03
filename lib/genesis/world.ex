@@ -23,7 +23,11 @@ defmodule Genesis.World do
   @doc """
   Creates a new unique object ID.
   """
-  def new(), do: System.unique_integer([:positive])
+  case Application.compile_env(:genesis, :object_ids, :integer) do
+    :reference -> def new(), do: make_ref()
+    :integer -> def new(), do: System.unique_integer([:positive, :monotonic])
+    other -> raise "Invalid option given to :object_ids: #{inspect(other)}"
+  end
 
   @doc """
   Fetches the aspects of an object.
