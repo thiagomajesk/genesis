@@ -13,7 +13,7 @@ defmodule Genesis.Value do
       type not in types && raise "prop type must be a scalar type, got: #{inspect(type)}"
 
       default_value = Keyword.get(opts, :default)
-      Genesis.Value.check_value(default_value, type)
+      Genesis.Value.check_value!(default_value, type)
 
       Module.put_attribute(__MODULE__, :properties, {name, type, opts})
     end
@@ -28,7 +28,7 @@ defmodule Genesis.Value do
     attrs
     |> Enum.into(%{})
     |> merge_defaults(props)
-    |> tap(&validate(&1, props))
+    |> tap(&validate!(&1, props))
     |> cast_attrs(props)
   end
 
@@ -42,15 +42,15 @@ defmodule Genesis.Value do
   end
 
   @doc false
-  def check_value(nil, _type), do: nil
-  def check_value(value, :binary) when is_binary(value), do: value
-  def check_value(value, :integer) when is_integer(value), do: value
-  def check_value(value, :float) when is_float(value), do: value
-  def check_value(value, :boolean) when is_boolean(value), do: value
-  def check_value(value, :atom) when is_atom(value), do: value
-  def check_value(value, :datetime) when is_struct(value, DateTime), do: value
+  def check_value!(nil, _type), do: nil
+  def check_value!(value, :binary) when is_binary(value), do: value
+  def check_value!(value, :integer) when is_integer(value), do: value
+  def check_value!(value, :float) when is_float(value), do: value
+  def check_value!(value, :boolean) when is_boolean(value), do: value
+  def check_value!(value, :atom) when is_atom(value), do: value
+  def check_value!(value, :datetime) when is_struct(value, DateTime), do: value
 
-  def check_value(value, type),
+  def check_value!(value, type),
     do: raise("value #{inspect(value)} is not valid for prop type #{type}")
 
   defp merge_defaults(attrs, props) do
@@ -59,7 +59,7 @@ defmodule Genesis.Value do
     end)
   end
 
-  defp validate(attrs, props) do
+  defp validate!(attrs, props) do
     Enum.each(props, fn {name, _type, opts} ->
       required? = Keyword.get(opts, :required, false)
 
@@ -76,7 +76,7 @@ defmodule Genesis.Value do
   defp cast_attrs(attrs, props) do
     Map.new(props, fn {name, type, _opts} ->
       value = Map.get(attrs, name)
-      {name, check_value(value, type)}
+      {name, check_value!(value, type)}
     end)
   end
 end

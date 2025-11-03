@@ -112,21 +112,21 @@ defmodule Genesis.ValueTest do
     end
   end
 
-  describe "check_value/2" do
+  describe "check_value!/2" do
     test "validates values against their type", %{type: type} do
       value = fixture(type)
-      assert check_value(value, type) == value
+      assert check_value!(value, type) == value
     end
 
     test "raises for invalid type", %{type: type} do
       invalid_value = fixture(:invalid)
 
       error_msg = "value #{inspect(invalid_value)} is not valid for prop type #{type}"
-      assert_raise RuntimeError, error_msg, fn -> check_value(invalid_value, type) end
+      assert_raise RuntimeError, error_msg, fn -> check_value!(invalid_value, type) end
     end
 
     test "allows nil for any type", %{type: type} do
-      assert check_value(nil, type) == nil
+      assert check_value!(nil, type) == nil
     end
   end
 
