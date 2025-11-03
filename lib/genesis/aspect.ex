@@ -201,19 +201,23 @@ defmodule Genesis.Aspect do
         Context.exists?(@table_name, object)
       end
 
-      def at_least(property, min) do
+      def at_least(property, min) when is_integer(min) do
+        validate_properties!([{property, min}])
         Context.at_least(@table_name, property, min)
       end
 
-      def at_most(property, max) do
+      def at_most(property, max) when is_integer(max) do
+        validate_properties!([{property, max}])
         Context.at_most(@table_name, property, max)
       end
 
-      def between(property, min, max) do
+      def between(property, min, max) when is_integer(min) and is_integer(max) do
+        validate_properties!([{property, min}, {property, max}])
         Context.between(@table_name, property, min, max)
       end
 
       def match(properties) when is_props(properties) do
+        validate_properties!(properties)
         Context.match(@table_name, properties)
       end
 
@@ -236,6 +240,21 @@ defmodule Genesis.Aspect do
       end
 
       def cast(attrs), do: cast(attrs, @properties)
+
+      defp validate_properties!(pairs) do
+        valid_props = Map.new(@properties, fn {name, type, _opts} -> {name, type} end)
+
+        for {property, value} <- pairs do
+          case Map.fetch(valid_props, property) do
+            {:ok, type} ->
+              check_value!(value, type)
+
+            :error ->
+              raise ArgumentError,
+                    "Property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}"
+          end
+        end
+      end
     end
   end
 end
