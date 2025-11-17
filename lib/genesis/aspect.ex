@@ -4,13 +4,14 @@ defmodule Genesis.Aspect do
   Aspects are modular pieces of state or behavior that can be attached to objects.
   """
   alias __MODULE__
-  alias Genesis.World
   alias Genesis.Context
+  alias Genesis.Manager
 
+  @type event :: Genesis.Event.t()
+  @type props :: keyword() | map()
   @type object :: integer() | atom() | binary()
-  @type props :: Enumerable.t()
 
-  @optional_callbacks handle_event: 3
+  @optional_callbacks handle_event: 1
 
   @doc """
   Initializes the aspect ETS table.
@@ -133,24 +134,23 @@ defmodule Genesis.Aspect do
   function should return a tuple with `:cont` or `:halt` to either keep processing
   the event or stop propagating the event to the remaining aspects in the pipeline.
   """
-  @callback handle_event(atom(), object(), map()) ::
-              {:cont, map()} | {:halt, map()}
+  @callback handle_event(event()) :: {:cont, event()} | {:halt, event()}
 
   defmacro __using__(opts \\ []) do
     quote bind_quoted: [opts: opts] do
       @behaviour Aspect
       @before_compile Aspect
 
-      @table_name __MODULE__
+      @table __MODULE__
       @events Keyword.get(opts, :events, [])
-
-      import Genesis.Value
 
       Module.register_attribute(__MODULE__, :properties, accumulate: true)
 
-      def init() do
-        {Context.init(@table_name), @events}
-      end
+      defguard is_props(term) when is_list(term) or is_non_struct_map(term)
+
+      import Genesis.Value, only: [prop: 2, prop: 3]
+
+      def init(), do: {Context.init(@table), @events}
 
       def new(attrs \\ []), do: struct!(__MODULE__, cast(attrs))
 
@@ -160,31 +160,43 @@ defmodule Genesis.Aspect do
         do: attach(object, __MODULE__.new(properties))
 
       def attach(object, %{__struct__: __MODULE__} = aspect),
-        do: World.send(object, :"$attach", aspect)
+        do: Manager.attach_aspect(object, aspect)
 
       def remove(object) do
-        case Context.get(@table_name, object) do
-          nil -> :noop
-          aspect -> World.send(object, :"$remove", aspect)
+        case Context.get(@table, object) do
+          nil ->
+            :noop
+
+          %{__struct__: __MODULE__} = aspect ->
+            Manager.remove_aspect(object, aspect)
+
+          _other ->
+            :error
         end
       end
 
       def update(object, properties) when is_props(properties) do
-        permitted = cast(properties)
+        case Context.get(@table, object) do
+          nil ->
+            :noop
 
-        case Context.get(@table_name, object) do
-          nil -> :noop
-          aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
+          %{__struct__: __MODULE__} = aspect ->
+            updated = Map.merge(aspect, cast(properties))
+            Manager.replace_aspect(object, updated)
+
+          _other ->
+            :error
         end
       end
 
       def update(object, property, fun) when is_atom(property) and is_function(fun, 1) do
-        case Context.get(@table_name, object) do
+        case Context.get(@table, object) do
           nil ->
             :noop
 
           %{^property => value} = aspect ->
-            World.send(object, :"$update", Map.put(aspect, property, fun.(value)))
+            updated = Map.put(aspect, property, fun.(value))
+            Manager.replace_aspect(object, updated)
 
           _aspect ->
             :error
@@ -192,33 +204,33 @@ defmodule Genesis.Aspect do
       end
 
       def get(object, default \\ nil) do
-        Context.get(@table_name, object, default)
+        Context.get(@table, object, default)
       end
 
-      def all(), do: Context.all(@table_name)
+      def all(), do: Context.all(@table)
 
       def exists?(object) do
-        Context.exists?(@table_name, object)
+        Context.exists?(@table, object)
       end
 
       def at_least(property, min) when is_integer(min) do
-        validate_properties!([{property, min}])
-        Context.at_least(@table_name, property, min)
+        ensure_props!([{property, min}])
+        Context.at_least(@table, property, min)
       end
 
       def at_most(property, max) when is_integer(max) do
-        validate_properties!([{property, max}])
-        Context.at_most(@table_name, property, max)
+        ensure_props!([{property, max}])
+        Context.at_most(@table, property, max)
       end
 
       def between(property, min, max) when is_integer(min) and is_integer(max) do
-        validate_properties!([{property, min}, {property, max}])
-        Context.between(@table_name, property, min, max)
+        ensure_props!([{property, min}, {property, max}])
+        Context.between(@table, property, min, max)
       end
 
       def match(properties) when is_props(properties) do
-        validate_properties!(properties)
-        Context.match(@table_name, properties)
+        ensure_props!(properties)
+        Context.match(@table, properties)
       end
 
       defoverridable new: 0, new: 1
@@ -227,33 +239,40 @@ defmodule Genesis.Aspect do
 
   defmacro __before_compile__(env) do
     quote do
-      defstruct to_fields(@properties)
+      defstruct Genesis.Value.defaults(@properties)
 
-      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 3}) do
+      def __aspect__(:table), do: @table
+      def __aspect__(:events), do: @events
+      def __aspect__(:properties), do: @properties
+
+      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 1}) do
         raise CompileError,
           file: unquote(env.file),
           line: unquote(env.line),
           description: """
-          Aspect #{unquote(env.module)} defines handle_event/3 but does not specify any events.
+          Aspect #{unquote(env.module)} defines handle_event/1 but does not specify any events.
           Please specify the events this aspect handles using `use Genesis.Aspect, events: [:event1, :event2]`.
           """
       end
 
-      def cast(attrs), do: cast(attrs, @properties)
+      def cast(attrs), do: Genesis.Value.cast(attrs, @properties)
 
-      defp validate_properties!(pairs) do
+      defp ensure_props!(pairs) do
         valid_props = Map.new(@properties, fn {name, type, _opts} -> {name, type} end)
 
-        for {property, value} <- pairs do
+        Enum.each(pairs, fn {property, value} ->
           case Map.fetch(valid_props, property) do
             {:ok, type} ->
-              check_value!(value, type)
+              Genesis.Value.ensure_type!(value, type)
 
             :error ->
               raise ArgumentError,
-                    "Property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}"
+                    """
+                    The property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}.
+                    Perhaps you meant to use one of the following instead: #{inspect(Map.keys(valid_props))}
+                    """
           end
-        end
+        end)
       end
     end
   end

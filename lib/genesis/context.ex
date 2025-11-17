@@ -6,7 +6,7 @@ defmodule Genesis.Context do
       :ets.new(table, [
         :set,
         :named_table,
-        write_concurrency: true
+        read_concurrency: true
       ])
     end
   end
@@ -15,39 +15,39 @@ defmodule Genesis.Context do
     with true <- :ets.delete(table), do: :ok
   end
 
-  def add(table, key, value) do
-    with true <- :ets.insert(table, {key, value}), do: :ok
+  def add(table, object, container) do
+    with true <- :ets.insert(table, {object, container}), do: :ok
   end
 
-  def get(table, key, default \\ nil) do
-    case :ets.lookup(table, key) do
+  def get(table, object, default \\ nil) do
+    case :ets.lookup(table, object) do
       [] -> default
-      [{_key, value}] -> value
+      [{_object, container}] -> container
     end
   end
 
-  def get!(table, key) do
-    case get(table, key) do
-      nil -> raise "key #{inspect(key)} not found in #{inspect(table)}"
-      value -> value
+  def get!(table, object) do
+    case get(table, object) do
+      nil -> raise "object #{inspect(object)} not found in #{inspect(table)}"
+      container -> container
     end
   end
 
-  def remove(table, key) do
-    with true <- :ets.delete(table, key), do: :ok
+  def remove(table, object) do
+    with true <- :ets.delete(table, object), do: :ok
   end
 
-  def update(table, key, default, fun) when is_function(fun, 1) do
-    case get(table, key) do
-      nil -> add(table, key, default)
-      values -> add(table, key, fun.(values))
+  def update(table, object, default, fun) when is_function(fun, 1) do
+    case get(table, object) do
+      nil -> add(table, object, default)
+      container -> add(table, object, fun.(container))
     end
   end
 
-  def update!(table, key, fun) when is_function(fun, 1) do
-    case get(table, key) do
-      nil -> raise "key #{inspect(key)} not found in #{inspect(table)}"
-      values -> add(table, key, fun.(values))
+  def update!(table, object, fun) when is_function(fun, 1) do
+    case get(table, object) do
+      nil -> raise "object #{inspect(object)} not found in #{inspect(table)}"
+      container -> add(table, object, fun.(container))
     end
   end
 
@@ -55,17 +55,17 @@ defmodule Genesis.Context do
     :ets.tab2list(table)
   end
 
-  def all(table, key) do
+  def all(table, object) do
     table
-    |> :ets.lookup(key)
+    |> :ets.lookup(object)
     |> Enum.flat_map(&elem(&1, 1))
   end
 
   def match(table, props) do
     guards =
-      for {prop, value} <- props do
+      Enum.map(props, fn {prop, value} ->
         {:==, {:map_get, prop, :"$2"}, value}
-      end
+      end)
 
     :ets.select(table, [
       {
@@ -76,8 +76,8 @@ defmodule Genesis.Context do
     ])
   end
 
-  def exists?(table, key) do
-    :ets.member(table, key)
+  def exists?(table, object) do
+    :ets.member(table, object)
   end
 
   def at_least(table, prop, value) do
@@ -118,27 +118,5 @@ defmodule Genesis.Context do
         [{{:"$1", :"$2"}}]
       }
     ])
-  end
-
-  def stream(table) do
-    Stream.resource(
-      fn ->
-        :ets.safe_fixtable(table, true)
-        :ets.first(table)
-      end,
-      fn
-        :"$end_of_table" ->
-          {:halt, :"$end_of_table"}
-
-        key ->
-          case :ets.lookup(table, key) do
-            [{^key, value}] -> {[{key, value}], :ets.next(table, key)}
-            [] -> {[], :ets.next(table, key)}
-          end
-      end,
-      fn _ ->
-        :ets.safe_fixtable(table, false)
-      end
-    )
   end
 end

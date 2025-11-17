@@ -62,7 +62,8 @@ defmodule Genesis.ContextTest do
     Context.add(table, :bar, "bar")
     Context.add(table, :baz, "baz")
 
-    [foo: "foo", baz: "baz", bar: "bar"] = Context.all(table)
+    list = Context.all(table)
+    assert [bar: "bar", baz: "baz", foo: "foo"] = Enum.sort(list)
   end
 
   test "all/2", %{table: table} do
@@ -78,7 +79,8 @@ defmodule Genesis.ContextTest do
     Context.add(table, :bar, %{starts_with: "b"})
     Context.add(table, :baz, %{starts_with: "b"})
 
-    [foo: %{starts_with: "f"}] = Context.match(table, %{starts_with: "f"})
+    list = Context.match(table, %{starts_with: "f"})
+    assert [foo: %{starts_with: "f"}] = Enum.sort(list)
   end
 
   test "exists?/2", %{table: table} do
@@ -93,7 +95,8 @@ defmodule Genesis.ContextTest do
     Context.add(table, :bar, %{n: 2})
     Context.add(table, :baz, %{n: 3})
 
-    assert [baz: %{n: 3}, bar: %{n: 2}] = Context.at_least(table, :n, 2)
+    list = Context.at_least(table, :n, 2)
+    assert [bar: %{n: 2}, baz: %{n: 3}] = Enum.sort(list)
   end
 
   test "at_most/3", %{table: table} do
@@ -101,7 +104,8 @@ defmodule Genesis.ContextTest do
     Context.add(table, :bar, %{n: 2})
     Context.add(table, :baz, %{n: 3})
 
-    assert [{:foo, %{n: 1}}, {:bar, %{n: 2}}] = Context.at_most(table, :n, 2)
+    list = Context.at_most(table, :n, 2)
+    assert [bar: %{n: 2}, foo: %{n: 1}] = Enum.sort(list)
   end
 
   test "between/4", %{table: table} do
@@ -109,14 +113,7 @@ defmodule Genesis.ContextTest do
     Context.add(table, :bar, %{n: 2})
     Context.add(table, :baz, %{n: 3})
 
-    assert [{:baz, %{n: 3}}, {:bar, %{n: 2}}] = Context.between(table, :n, 2, 3)
-  end
-
-  test "stream/1", %{table: table} do
-    Context.add(table, :foo, "foo")
-    Context.add(table, :bar, "bar")
-    Context.add(table, :baz, "baz")
-
-    assert [{:bar, "bar"}, {:baz, "baz"}, {:foo, "foo"}] = Enum.to_list(Context.stream(table))
+    list = Context.between(table, :n, 2, 3)
+    assert [bar: %{n: 2}, baz: %{n: 3}] = Enum.sort(list)
   end
 end

@@ -62,15 +62,15 @@ defmodule Sprite do
 
   prop :emoji, :binary
 
-  def handle_event(:morph, object, args) do
-    %{emoji: emoji} = Sprite.get(object)
+  def handle_event(%{name: :morph} = event) do
+    %{emoji: emoji} = Sprite.get(event.object)
 
     if not is_nil(emoji) and :rand.uniform() <= 0.1 do
-      Genesis.World.send(object, :greet)
-      Sprite.update(object, :emoji, &Evolution.next/1)
+      Genesis.World.send(event.world, event.object, :greet)
+      Sprite.update(event.object, :emoji, &Evolution.next/1)
     end
 
-    {:cont, args}
+    {:cont, event}
   end
 end
 
@@ -79,15 +79,15 @@ defmodule Moniker do
 
   prop :name, :binary
 
-  def handle_event(:greet, object, args) do
-    %{name: name} = Moniker.get(object)
+  def handle_event(%{name: :greet} = event) do
+    %{name: name} = Moniker.get(event.object)
     IO.puts("#{name} is evolving!")
-    {:cont, args}
+    {:cont, event}
   end
 end
 
-Genesis.World.register_aspect(Sprite)
-Genesis.World.register_aspect(Moniker)
+Genesis.Manager.register_aspect(Sprite)
+Genesis.Manager.register_aspect(Moniker)
 
 ################################################################################
 # LiveView
@@ -99,6 +99,10 @@ defmodule DemoLive do
     ~H"""
     <section>
       <header>
+       <span>
+          <strong>World</strong>
+          <small>{inspect(@world)}</small>
+        </span>
         <span>
           <strong>Max objects</strong>
           <small>{@max_objects}</small>
@@ -111,7 +115,8 @@ defmodule DemoLive do
           <small>{@tick_count}</small></span>
         <span>
           <strong>Tick timer</strong>
-          <small>{inspect(@tick_timer)}</small></span>
+          <small>{inspect(@tick_timer)}</small>
+        </span>
       </header>
       <div style="display: flex; flex-wrap: wrap; margin-top: 1rem; gap: 0.2rem">
         <span :for={object <- Enum.take(@objects, 1000)} style="display: flex; flex-direction: column; align-items: center; width: 2.5rem; height: 2.5rem; border: 1px solid gray">
@@ -129,6 +134,7 @@ defmodule DemoLive do
     {:ok,
      socket
      |> assign(:objects, [])
+     |> assign(:world, nil)
      |> assign(:tick_rate, 20)
      |> assign(:tick_count, 0)
      |> assign(:tick_timer, nil)
@@ -136,7 +142,12 @@ defmodule DemoLive do
   end
 
   def handle_info(:init, socket) do
-    stream = Stream.repeatedly(&Genesis.World.new/0)
+    {:ok, world} = Genesis.World.start_link([])
+
+    stream =
+      Stream.repeatedly(fn ->
+        Genesis.World.create(world)
+      end)
 
     objects =
       stream
@@ -146,12 +157,15 @@ defmodule DemoLive do
     {:noreply,
      socket
      |> schedule_next_tick()
+     |> assign(:world, world)
      |> assign(:objects, objects)}
   end
 
   def handle_info(:tick, socket) do
+    world = socket.assigns.world
     objects = socket.assigns.objects
-    Enum.each(objects, &Genesis.World.send(&1, :morph))
+
+    Enum.each(objects, &Genesis.World.send(world, &1, :morph))
 
     # Trigger a re-render by sorting the objects
     sorted = Enum.sort_by(objects, &Sprite.get/1, :desc)

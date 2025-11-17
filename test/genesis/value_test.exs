@@ -1,6 +1,6 @@
 defmodule Genesis.ValueTest do
-  @scalar_types [:atom, :binary, :float, :integer, :boolean, :datetime]
-  @type_params Enum.map(@scalar_types, fn type -> %{type: type} end)
+  @valid_types [:atom, :binary, :float, :integer, :boolean, :datetime, :pid, :ref]
+  @type_params Enum.map(@valid_types, fn type -> %{type: type} end)
 
   use ExUnit.Case,
     async: true,
@@ -10,13 +10,13 @@ defmodule Genesis.ValueTest do
 
   describe "prop/3" do
     test "rejects non-atom name" do
-      error_msg = "prop name must be an atom"
+      error_msg = "The property name must be an atom"
       assert_raise RuntimeError, ~r/#{error_msg}/, fn -> prop "invalid", :binary end
     end
 
-    test "rejects non-scalar type" do
-      error_msg = "prop type must be a scalar type"
-      assert_raise RuntimeError, ~r/#{error_msg}/, fn -> prop :invalid, :not_a_scalar_type end
+    test "rejects invalid type" do
+      error_msg = "The property type must be one of"
+      assert_raise ArgumentError, ~r/#{error_msg}/, fn -> prop :invalid, :invalid end
     end
   end
 
@@ -36,7 +36,7 @@ defmodule Genesis.ValueTest do
       props = [{prop_name, type, [required: true]}]
 
       # Empty values (nil) should raise an error for required props
-      error_msg = "required property :test_prop cannot be empty"
+      error_msg = "The property :test_prop cannot be empty"
       assert_raise RuntimeError, error_msg, fn -> cast(%{prop_name => nil}, props) end
 
       # Non-empty values should work fine
@@ -48,7 +48,7 @@ defmodule Genesis.ValueTest do
     test "considers whitespace-only strings as empty for required binary properties" do
       prop_name = :test_prop
       props = [{prop_name, :binary, [required: true]}]
-      error_msg = "required property :test_prop cannot be empty"
+      error_msg = "The property :test_prop cannot be empty"
 
       # Empty string and whitespace-only strings should be considered empty
       assert_raise RuntimeError, error_msg, fn -> cast(%{prop_name => ""}, props) end
@@ -78,7 +78,7 @@ defmodule Genesis.ValueTest do
       attrs = [{prop_name, invalid_value}]
 
       error_msg = "value #{inspect(invalid_value)} is not valid for prop type #{type}"
-      assert_raise RuntimeError, error_msg, fn -> cast(attrs, props) end
+      assert_raise ArgumentError, error_msg, fn -> cast(attrs, props) end
     end
 
     test "ignores keys not in props definition", %{type: type} do
@@ -101,7 +101,7 @@ defmodule Genesis.ValueTest do
       assert result[prop_name] == nil
     end
 
-    test "properly casts scalar values", %{type: type} do
+    test "properly casts only valid values", %{type: type} do
       prop_name = :test_prop
       props = [{prop_name, type, [required: true]}]
       value = fixture(type)
@@ -112,21 +112,21 @@ defmodule Genesis.ValueTest do
     end
   end
 
-  describe "check_value!/2" do
+  describe "ensure_type!/2" do
     test "validates values against their type", %{type: type} do
       value = fixture(type)
-      assert check_value!(value, type) == value
+      assert ensure_type!(value, type) == value
     end
 
     test "raises for invalid type", %{type: type} do
       invalid_value = fixture(:invalid)
 
       error_msg = "value #{inspect(invalid_value)} is not valid for prop type #{type}"
-      assert_raise RuntimeError, error_msg, fn -> check_value!(invalid_value, type) end
+      assert_raise ArgumentError, error_msg, fn -> ensure_type!(invalid_value, type) end
     end
 
     test "allows nil for any type", %{type: type} do
-      assert check_value!(nil, type) == nil
+      assert ensure_type!(nil, type) == nil
     end
   end
 
@@ -136,5 +136,7 @@ defmodule Genesis.ValueTest do
   defp fixture(:integer), do: 42
   defp fixture(:boolean), do: true
   defp fixture(:datetime), do: DateTime.utc_now()
+  defp fixture(:pid), do: self()
+  defp fixture(:ref), do: make_ref()
   defp fixture(:invalid), do: %{}
 end
