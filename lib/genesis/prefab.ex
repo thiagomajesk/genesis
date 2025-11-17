@@ -1,31 +1,33 @@
 defmodule Genesis.Prefab do
   @moduledoc false
+
   defstruct [:name, :inherit, :aspects]
 
   alias __MODULE__
-  alias Genesis.Context
 
+  def load(attrs, opts \\ []) do
+    registered_prefabs = Keyword.get(opts, :registered_prefabs, [])
+    registered_aspects = Keyword.get(opts, :registered_aspects, [])
 
-  def load(attrs, registered) do
+    aspects_lookup = Map.new(registered_aspects)
+    prefabs_lookup = Map.new(registered_prefabs)
+
     name = Map.fetch!(attrs, :name)
     aspects = Map.fetch!(attrs, :aspects)
     inherits = Map.get(attrs, :inherits, [])
 
-    # Create an alias/module lookup from registered aspects
-    lookup = Map.new(registered, &{elem(&1, 1), elem(&1, 0)})
-
     declared =
       Enum.map(aspects, fn {as, props} ->
-        module = Map.fetch!(lookup, as)
+        module = Map.fetch!(aspects_lookup, as)
         loaded = Code.ensure_loaded!(module)
         {loaded, {:merge, props}}
       end)
 
     inherited =
-      inherits
-      |> Enum.map(&Context.get!(:genesis_prefabs, &1))
-      |> Enum.flat_map(& &1.aspects)
-      |> Enum.map(&{&1.__struct__, {:inherit, Map.from_struct(&1)}})
+      Enum.flat_map(inherits, fn name ->
+        %{aspects: aspects} = Map.fetch!(prefabs_lookup, name)
+        Enum.map(aspects, &{&1.__struct__, {:inherit, Map.from_struct(&1)}})
+      end)
 
     merged_aspects = merge_aspects(inherited, declared)
     final_aspects = Enum.map(merged_aspects, fn {module, props} -> module.new(props) end)

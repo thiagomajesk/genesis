@@ -1,26 +1,50 @@
 defmodule Genesis.Value do
-  @doc false
-  defguard is_props(term) when is_list(term) or (is_map(term) and not is_struct(term))
-
   @doc """
-  Defines a property for the aspect.
+  Defines a property for an Aspect.
+
+  ## Examples
+
+      prop :name, :binary, required: true
+      prop :age, :integer, default: 0
+
+  The supported types are:  `:atom`, `:binary`, `:boolean`, `:datetime`,
+  `:float`, `:integer`, `:pid`, `:ref`.
+
+  ## Options
+
+    * `:required` - when set to `true`, the property must be provided when
+    creating or updating the aspect. Defaults to `false`.
+
+    * `:default` - specifies a default value for the property if none is provided.
+
+  ## Validation
+
+  The property value is validated against its type when the aspect is created
+  or updated. If the value does not match the type, an `ArgumentError` is raised.
   """
   defmacro prop(name, type, opts \\ []) do
     quote bind_quoted: binding() do
-      not is_atom(name) && raise "prop name must be an atom, got: #{inspect(name)}"
+      not is_atom(name) && raise "The property name must be an atom, got: #{inspect(name)}"
 
-      types = [:atom, :binary, :float, :integer, :boolean, :datetime]
-      type not in types && raise "prop type must be a scalar type, got: #{inspect(type)}"
+      validators = Genesis.Value.validators()
 
-      default_value = Keyword.get(opts, :default)
-      Genesis.Value.check_value!(default_value, type)
+      case Map.fetch(validators, type) do
+        {:ok, validator} ->
+          default_value = Keyword.get(opts, :default)
+          Genesis.Value.ensure_type!(default_value, type)
+          Module.put_attribute(__MODULE__, :properties, {name, type, opts})
 
-      Module.put_attribute(__MODULE__, :properties, {name, type, opts})
+        :error ->
+          valid_types = Map.keys(validators)
+
+          raise ArgumentError,
+                "The property type must be one of #{inspect(valid_types)}, got: #{inspect(type)}"
+      end
     end
   end
 
   @doc """
-  Casts the given attrs using the given props definition.
+  Casts attrs against the given props definition.
   """
   def cast(_attrs, []), do: %{}
 
@@ -28,30 +52,46 @@ defmodule Genesis.Value do
     attrs
     |> Enum.into(%{})
     |> merge_defaults(props)
-    |> tap(&validate!(&1, props))
-    |> cast_attrs(props)
+    |> build_props(props)
+  end
+
+  @doc """
+  Checks that the given value can be used as a prop of `type`.
+  Raises `ArgumentError` if the value does not match the `type`.
+  """
+  def ensure_type!(nil, _type), do: nil
+
+  def ensure_type!(value, type) do
+    validator = Map.get(validators(), type)
+
+    cond do
+      validator && validator.(value) -> value
+      true -> raise ArgumentError, "value #{inspect(value)} is not valid for prop type #{type}"
+    end
   end
 
   @doc false
-  def to_fields([]), do: []
+  def validators do
+    %{
+      atom: &is_atom/1,
+      binary: &is_binary/1,
+      boolean: &is_boolean/1,
+      datetime: &is_struct(&1, DateTime),
+      float: &is_float/1,
+      integer: &is_integer/1,
+      pid: &is_pid/1,
+      ref: &is_reference/1
+    }
+  end
 
-  def to_fields(properties) do
+  @doc false
+  def defaults([]), do: []
+
+  def defaults(properties) do
     Enum.map(properties, fn {name, _type, opts} ->
       {name, Keyword.get(opts, :default)}
     end)
   end
-
-  @doc false
-  def check_value!(nil, _type), do: nil
-  def check_value!(value, :binary) when is_binary(value), do: value
-  def check_value!(value, :integer) when is_integer(value), do: value
-  def check_value!(value, :float) when is_float(value), do: value
-  def check_value!(value, :boolean) when is_boolean(value), do: value
-  def check_value!(value, :atom) when is_atom(value), do: value
-  def check_value!(value, :datetime) when is_struct(value, DateTime), do: value
-
-  def check_value!(value, type),
-    do: raise("value #{inspect(value)} is not valid for prop type #{type}")
 
   defp merge_defaults(attrs, props) do
     Enum.reduce(props, attrs, fn {name, _type, opts}, acc ->
@@ -59,24 +99,21 @@ defmodule Genesis.Value do
     end)
   end
 
-  defp validate!(attrs, props) do
-    Enum.each(props, fn {name, _type, opts} ->
+  defp build_props(attrs, props) do
+    Map.new(props, fn {name, type, opts} ->
+      value = Map.get(attrs, name)
+
       required? = Keyword.get(opts, :required, false)
 
-      if required? && empty_value?(Map.get(attrs, name)) do
-        raise "required property #{inspect(name)} cannot be empty"
+      if required? && empty_value?(value) do
+        raise "The property #{inspect(name)} cannot be empty"
       end
+
+      {name, ensure_type!(value, type)}
     end)
   end
 
   defp empty_value?(nil), do: true
   defp empty_value?(value) when is_binary(value), do: String.trim(value) == ""
   defp empty_value?(_), do: false
-
-  defp cast_attrs(attrs, props) do
-    Map.new(props, fn {name, type, _opts} ->
-      value = Map.get(attrs, name)
-      {name, check_value!(value, type)}
-    end)
-  end
 end

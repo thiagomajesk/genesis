@@ -1,331 +1,252 @@
 defmodule Genesis.World do
   @moduledoc """
-  The World is a GenServer that acts as a registry and manages the lifecycle of objects and aspects.
-  It is responsible for creating, cloning, and destroying objects, as well as registering aspects and prefabs.
-  It also manages the event routing for objects and aspects, ensuring that events are dispatched to the correct handlers.
+  World is a GenServer that manages the lifecycle of objects in the game.
+  It is responsible for creating, cloning, and destroying objects. It also manages the event
+  routing logic for object's aspects, ensuring that events are dispatched and handled correctly.
   """
   use GenServer
-
-  alias Genesis.RPC
-  alias Genesis.Aspect
-  alias Genesis.Context
-  alias Genesis.Prefab
-
-  require Logger
 
   @doc """
   Starts the World process.
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts)
   end
 
   @doc """
-  Creates a new unique object ID.
+  Sends a message to an object.
+
+  The event will be dispatched to all aspects currently attached to the object that
+  should handle the event which will be processed in order of registration.
   """
-  case Application.compile_env(:genesis, :object_ids, :integer) do
-    :reference -> def new(), do: make_ref()
-    :integer -> def new(), do: System.unique_integer([:positive, :monotonic])
-    other -> raise "Invalid option given to :object_ids: #{inspect(other)}"
+  def send(world, object, event, args \\ %{})
+
+  def send(world, object, event, args) when is_atom(event) do
+    GenServer.call(world, {:send, object, {event, args}})
+  end
+
+  @doc """
+  Creates a new object in the world.
+  """
+  def create(world) do
+    GenServer.call(world, :create)
+  end
+
+  @doc """
+  Creates a new object from a prefab.
+  The prefab must be registered before it can be used.
+  """
+  def create(world, name) do
+    GenServer.call(world, {:create, name})
   end
 
   @doc """
   Fetches the aspects of an object.
   """
-  def fetch(object), do: Context.all(:genesis_objects, object)
-
-  @doc """
-  List all aspects registered in the world.
-  """
-  def list_aspects() do
-    GenServer.call(__MODULE__, :list_aspects)
+  def fetch(object) do
+    table = Genesis.Manager.table(:objects)
+    :ets.select(table, [{{object, :"$1"}, [], [:"$1"]}])
   end
 
   @doc """
-  List all objects spawned in the world.
+  Fetches the aspects of an object in the world.
   """
-  def list_objects(opts \\ []) do
-    format = Keyword.get(opts, :aspects_as, :list)
-    GenServer.call(__MODULE__, {:list_objects, format})
+  def fetch(world, object) do
+    GenServer.call(world, {:fetch, object})
   end
 
   @doc """
-  Registers an aspect module.
+  Clones an object with all its aspects.
+  The clone object will be created in the current world.
   """
-  def register_aspect(module_or_tuple)
-
-  def register_aspect(module) when is_atom(module) do
-    register_aspect({Genesis.Utils.aliasify(module), module})
-  end
-
-  def register_aspect({as, module}) do
-    # We want the server to block registration calls to ensure
-    # that the table is created before other process tries to access it.
-    GenServer.call(__MODULE__, {:register_aspect, {as, module}})
-  end
-
-  @doc """
-  Registers a new prefab.
-  """
-  def register_prefab(attrs) do
-    # We want the server to block registration calls to ensure
-    # that the table is created before other process tries to access it.
-    GenServer.call(__MODULE__, {:register_prefab, attrs})
-  end
-
-  @doc """
-  Creates a new object from a prefab.
-  The prefab must be registered in the World before it can be used.
-  """
-  def create(prefab) do
-    GenServer.call(__MODULE__, {:create, prefab})
-  end
-
-  @doc """
-  Clones an object with all the aspects as the original object.
-  """
-  def clone(object) do
-    GenServer.call(__MODULE__, {:clone, object})
+  def clone(world, object) do
+    GenServer.call(world, {:clone, object})
   end
 
   @doc """
   Destroys an object from the world.
+  Returns `:ok` if the object was successfully destroyed, or `:noop` if the object doesn't exist.
   """
-  def destroy(object) do
-    GenServer.call(__MODULE__, {:destroy, object})
+  def destroy(world, object) do
+    GenServer.call(world, {:destroy, object})
   end
 
   @doc """
-  Waits for all object events to be processed.
-  Returns a list of the events processed so far.
+  List all objects with their respective aspects.
+
+  ## Options
+
+    * `:aspects_as` - Specifies how to represent the aspects of each object.
+      Can be `:list` (default) to return a list of aspect structs, or `:map` to return
+      a map where keys are aspect aliases and values are aspect structs.
+
+  ## Examples
+
+      iex> Genesis.World.list_objects(aspects_as: :list)
+      [{1, [%Health{current: 100}]}]
+
+      iex> Genesis.World.list_objects(aspects_as: :map)
+      [{1, %{"health" => %Health{current: 100}}}]
   """
-  def flush(timeout \\ :infinity) do
-    GenServer.call(__MODULE__, :"$flush", timeout)
-  end
+  def list_objects(opts \\ []) do
+    table = Genesis.Manager.table(:objects)
 
-  @doc """
-  Resets the world state by destroying all objects.
-  """
-  def reset(timeout \\ :infinity) do
-    GenServer.call(__MODULE__, :"$reset", timeout)
-  end
+    case Keyword.get(opts, :aspects_as, :list) do
+      :list ->
+        Genesis.ETS.group_keys(table)
 
-  @doc """
-  Sends a message to an object.
-  """
-  def send(object, event, args \\ %{})
+      :map ->
+        stream = Genesis.ETS.group_keys(table)
 
-  def send(object, event, aspect) when event in [:"$attach", :"$remove", :"$update"] do
-    # When sending an event to an object about the creation or removal of an aspect,
-    # we also block to ensure that the respective ETS tables get updated for further consumption.
-    GenServer.call(__MODULE__, {event, object, aspect})
-  end
+        aspects_lookup =
+          Map.new(
+            Genesis.Manager.list_aspects(),
+            fn {as, module} -> {module, as} end
+          )
 
-  def send(object, event, args) when is_atom(event) do
-    # When sending messages that objects should handle, we don't block.
-    # This is by design, because aspect handlers should work independently.
-    GenServer.cast(__MODULE__, {:"$event", object, {event, args}})
-  end
-
-  @impl true
-  def init(_opts) do
-    Context.init(:genesis_objects)
-    Context.init(:genesis_prefabs)
-
-    {:ok, %{aspects: [], events_lookup: %{}}}
-  end
-
-  @impl true
-  def handle_call(:list_aspects, _from, state) do
-    {:reply, Enum.reverse(state.aspects), state}
-  end
-
-  @impl true
-  def handle_call({:list_objects, :list}, _from, state) do
-    {:reply, Context.all(:genesis_objects), state}
-  end
-
-  @impl true
-  def handle_call({:list_objects, :map}, _from, state) do
-    stream = Context.stream(:genesis_objects)
-
-    objects =
-      Enum.map(stream, fn {object, aspects} ->
-        {object,
-         Map.new(aspects, fn aspect ->
-           # TODO: Get alias from registered aspects
-           name = Genesis.Utils.aliasify(aspect.__struct__)
-           {name, Map.from_struct(aspect)}
-         end)}
-      end)
-
-    {:reply, objects, state}
-  end
-
-  @impl true
-  def handle_call({:register_aspect, {as, module}}, _from, state) do
-    if not is_aspect?(module), do: raise("Invalid aspect #{inspect(module)}")
-
-    {table, events} = module.init()
-
-    events_lookup =
-      Enum.reduce(events, state.events_lookup, fn event, lookup ->
-        Map.update(lookup, event, [module], &[module | &1])
-      end)
-
-    state =
-      state
-      |> Map.put(:events_lookup, events_lookup)
-      |> Map.update!(:aspects, &[{module, as, table, events} | &1])
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:register_prefab, attrs}, _from, state) do
-    prefab = Prefab.load(attrs, state.aspects)
-
-    Context.add(:genesis_prefabs, prefab.name, prefab)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:create, prefab}, _from, state) do
-    case Context.get(:genesis_prefabs, prefab) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
-
-      %Prefab{} = prefab ->
-        object = new()
-
-        Enum.each(prefab.aspects, fn aspect ->
-          aspect = struct(aspect)
-          upsert_object_aspect(object, aspect)
+        Stream.map(stream, fn {object, aspects} ->
+          {object,
+           Map.new(aspects, fn aspect ->
+             {module, map} = Map.pop!(aspect, :__struct__)
+             {Map.fetch!(aspects_lookup, module), map}
+           end)}
         end)
-
-        {:reply, object, state}
     end
   end
 
   @impl true
-  def handle_call({:clone, object}, _from, state) do
-    aspects = Context.get(:genesis_objects, object)
+  def init(opts) do
+    max_events = Access.get(opts, :max_events, 1000)
+    partitions = Access.get(opts, :partitions, System.schedulers_online())
 
-    new_object = new()
+    {:ok, supervisor} = Supervisor.start_link([], strategy: :one_for_one)
 
-    # We reverse the list so we can register the aspects for the clone
-    # in the same order as they were registered for the original object.
-    aspects
-    |> Enum.reverse()
-    |> Enum.each(&upsert_object_aspect(new_object, &1))
+    {:ok, herald} = Supervisor.start_child(supervisor, {Genesis.Herald, partitions: partitions})
 
-    {:reply, new_object, state}
+    Enum.each(0..(partitions - 1), fn partition ->
+      envoy_child_spec =
+        Supervisor.child_spec({Genesis.Envoy, parent: herald}, id: {:envoy, partition})
+
+      {:ok, envoy} = Supervisor.start_child(supervisor, envoy_child_spec)
+
+      GenStage.async_subscribe(envoy, to: herald, partition: partition)
+
+      scribe_child_spec =
+        Supervisor.child_spec({Genesis.Scribe, parent: envoy}, id: {:scribe, partition})
+
+      {:ok, scribe} = Supervisor.start_child(supervisor, scribe_child_spec)
+
+      GenStage.async_subscribe(scribe, to: envoy, max_demand: max_events)
+    end)
+
+    {:ok, %{herald: herald, objects: MapSet.new()}}
   end
 
   @impl true
-  def handle_call({:destroy, object}, _from, state) do
-    case Context.get(:genesis_objects, object) do
-      nil ->
+  def handle_call({:send, object, {event, args}}, {pid, _tag}, state) do
+    case lookup_handlers(object, event) do
+      [] ->
         {:reply, :noop, state}
 
-      aspects ->
-        Context.remove(:genesis_objects, object)
-        Enum.each(aspects, &Context.remove(&1.__struct__, object))
+      modules ->
+        event = %Genesis.Event{
+          name: event,
+          from: pid,
+          args: args,
+          world: self(),
+          object: object,
+          handlers: Enum.reverse(modules),
+          timestamp: :erlang.system_time()
+        }
+
+        Genesis.Herald.notify(state.herald, event)
+
         {:reply, :ok, state}
     end
   end
 
   @impl true
-  def handle_call(:"$flush", _from, state) do
-    pids =
-      Genesis.Router
-      |> PartitionSupervisor.which_children()
-      |> Enum.map(fn {_, pid, _type, _} -> pid end)
-
-    Logger.debug("Flushing partitions: #{inspect(pids)}")
-
-    {:reply, Enum.flat_map(pids, &RPC.flush/1), state}
+  def handle_call(:create, _from, state) do
+    object = Genesis.Utils.object_id()
+    objects = MapSet.put(state.objects, object)
+    {:reply, object, %{state | objects: objects}}
   end
 
   @impl true
-  def handle_call(:"$reset", _from, state) do
-    :ets.delete_all_objects(:genesis_objects)
+  def handle_call({:create, name}, _from, state) do
+    table = Genesis.Manager.table(:prefabs)
 
-    Enum.each(state.aspects, fn {_, _, table, _} -> Context.drop(table) end)
+    case Genesis.ETS.get(table, name, nil) do
+      nil ->
+        {:reply, :noop, state}
 
-    {:reply, :ok, %{aspects: [], events_lookup: %{}}}
+      %{aspects: aspects} ->
+        object = Genesis.Utils.object_id()
+
+        Enum.each(aspects, fn aspect ->
+          Genesis.Manager.attach_aspect(object, aspect)
+        end)
+
+        objects = MapSet.put(state.objects, object)
+        {:reply, object, %{state | objects: objects}}
+    end
   end
 
   @impl true
-  def handle_call({:"$attach", object, aspect}, _from, state) do
-    upsert_object_aspect(object, aspect)
-
-    # TODO: Notify the object about the aspect (ATTACH)
-
-    {:reply, :ok, state}
+  def handle_call({:fetch, object}, _from, state) do
+    if MapSet.member?(state.objects, object),
+      do: {:reply, fetch(object), state},
+      else: {:reply, nil, state}
   end
 
   @impl true
-  def handle_call({:"$update", object, aspect}, _from, state) do
-    upsert_object_aspect(object, aspect)
-
-    # TODO: Notify the object about the aspect (UPDATE)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:"$remove", object, aspect}, _from, state) do
-    remove_object_aspect(object, aspect)
-
-    # TODO: Notify the object about the aspect (REMOVE)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_cast({:"$event", object, {event, args}}, state) do
+  def handle_call({:clone, object}, _from, state) do
     aspects = fetch(object)
-    modules_lookup = MapSet.new(Enum.map(aspects, & &1.__struct__))
-    dispatch_lookup = MapSet.new(Map.get(state.events_lookup, event, []))
 
-    modules = MapSet.intersection(dispatch_lookup, modules_lookup)
+    clone = Genesis.Utils.object_id()
 
-    # We use the RPC GenServer to dispatch events to object's aspects.
-    # This ensures that the World GenServer won't deadlock if aspects need to
-    # perform blocking operations like calling Aspect.attach/2 or Aspect.remove/2.
-    # Additionally, the Router (PartitionSupervisor) will guarantee that events are processed
-    # in the correct order - Sequentially for the same object, and in parallel for different objects.
-    message = {event, args, object, Enum.reverse(modules)}
-    RPC.dispatch({:via, PartitionSupervisor, {Genesis.Router, object}}, message)
-
-    {:noreply, state}
-  end
-
-  defp upsert_object_aspect(object, aspect) do
-    update_object_aspect(object, aspect)
-    Context.add(aspect.__struct__, object, aspect)
-  end
-
-  defp remove_object_aspect(object, aspect) do
-    Context.remove(aspect.__struct__, object)
-    Context.update!(:genesis_objects, object, &without_aspect(&1, aspect))
-  end
-
-  defp update_object_aspect(object, new_aspect) do
-    Context.update(:genesis_objects, object, [new_aspect], fn aspects ->
-      # Make sure we remove any old versions of the aspect
-      [new_aspect | without_aspect(aspects, new_aspect)]
+    Enum.each(aspects, fn aspect ->
+      Genesis.Manager.attach_aspect(clone, aspect)
     end)
+
+    objects = MapSet.put(state.objects, clone)
+    {:reply, clone, %{state | objects: objects}}
   end
 
-  defp without_aspect(aspects, aspect) do
-    Enum.reject(aspects, &(&1.__struct__ == aspect.__struct__))
+  @impl true
+  def handle_call({:destroy, object}, _from, state) do
+    can_destroy? = MapSet.member?(state.objects, object)
+
+    case {can_destroy?, fetch(object)} do
+      {false, _aspects} ->
+        {:reply, :noop, state}
+
+      {true, aspects} ->
+        Enum.each(aspects, fn %{__struct__: module} ->
+          Genesis.Manager.remove_aspect(object, module)
+        end)
+
+        objects = MapSet.delete(state.objects, object)
+        {:reply, :ok, %{state | objects: objects}}
+    end
   end
 
-  defp is_aspect?(module) do
-    attributes = module.__info__(:attributes)
-    Aspect in Access.get(attributes, :behaviour, [])
+  defp lookup_handlers(object, event) do
+    aspects = fetch(object)
+    modules = MapSet.new(aspects, & &1.__struct__)
+
+    table = Genesis.Manager.table(:events)
+
+    case Genesis.ETS.get(table, event, nil) do
+      nil ->
+        []
+
+      handlers ->
+        Enum.reduce(handlers, [], fn {_as, module}, acc ->
+          if MapSet.member?(modules, module),
+            do: [module | acc],
+            else: acc
+        end)
+    end
   end
 end

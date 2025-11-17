@@ -3,8 +3,6 @@ defmodule Genesis.Query do
   Provides helper functions to query objects in the registry.
   """
 
-  alias Genesis.Context
-
   @doc """
   Returns a list of objects that have all the aspects specified in the list.
 
@@ -16,8 +14,10 @@ defmodule Genesis.Query do
   def all_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :genesis_objects
-    |> Context.stream()
+    table = Genesis.Manager.table(:objects)
+
+    table
+    |> Genesis.ETS.group_keys()
     |> apply_filter(:all, modules_lookup)
     |> Enum.to_list()
   end
@@ -33,8 +33,10 @@ defmodule Genesis.Query do
   def any_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :genesis_objects
-    |> Context.stream()
+    table = Genesis.Manager.table(:objects)
+
+    table
+    |> Genesis.ETS.group_keys()
     |> apply_filter(:any, modules_lookup)
     |> Enum.to_list()
   end
@@ -50,8 +52,10 @@ defmodule Genesis.Query do
   def none_of(modules) when is_list(modules) do
     modules_lookup = MapSet.new(modules)
 
-    :genesis_objects
-    |> Context.stream()
+    table = Genesis.Manager.table(:objects)
+
+    table
+    |> Genesis.ETS.group_keys()
     |> apply_filter(:none, modules_lookup)
     |> Enum.to_list()
   end
@@ -74,8 +78,10 @@ defmodule Genesis.Query do
     any_lookup = any && MapSet.new(any)
     none_lookup = none && MapSet.new(none)
 
-    :genesis_objects
-    |> Context.stream()
+    table = Genesis.Manager.table(:objects)
+
+    table
+    |> Genesis.ETS.group_keys()
     |> apply_filter(:all, all_lookup)
     |> apply_filter(:any, any_lookup)
     |> apply_filter(:none, none_lookup)
@@ -86,22 +92,22 @@ defmodule Genesis.Query do
 
   defp apply_filter(stream, :all, lookup) do
     Stream.filter(stream, fn {_object, aspects} ->
-      aspects_lookup = MapSet.new(Enum.map(aspects, & &1.__struct__))
-      MapSet.subset?(lookup, aspects_lookup)
+      modules = Enum.map(aspects, & &1.__struct__)
+      MapSet.subset?(lookup, MapSet.new(modules))
     end)
   end
 
   defp apply_filter(stream, :any, lookup) do
     Stream.filter(stream, fn {_object, aspects} ->
-      aspects_lookup = MapSet.new(Enum.map(aspects, & &1.__struct__))
-      not MapSet.disjoint?(lookup, aspects_lookup)
+      modules = Enum.map(aspects, & &1.__struct__)
+      not MapSet.disjoint?(lookup, MapSet.new(modules))
     end)
   end
 
   defp apply_filter(stream, :none, lookup) do
     Stream.filter(stream, fn {_object, aspects} ->
-      aspects_lookup = MapSet.new(Enum.map(aspects, & &1.__struct__))
-      MapSet.disjoint?(lookup, aspects_lookup)
+      modules = Enum.map(aspects, & &1.__struct__)
+      MapSet.disjoint?(lookup, MapSet.new(modules))
     end)
   end
 end
