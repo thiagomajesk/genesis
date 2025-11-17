@@ -2,119 +2,164 @@ defmodule Genesis.WorldTest do
   use ExUnit.Case
 
   alias Genesis.World
+  alias Genesis.Manager
   alias Genesis.Aspects.Health
   alias Genesis.Aspects.Moniker
   alias Genesis.Aspects.Position
   alias Genesis.Aspects.Selectable
 
   setup do
-    on_exit(fn -> World.reset() end)
-  end
+    on_exit(fn -> Manager.reset() end)
 
-  test "new/0" do
-    objects = Enum.map(1..999, fn _ -> World.new() end)
-    refute length(Enum.uniq(objects)) != length(objects)
+    aspects = [Health, Moniker, Position, Selectable]
+    Enum.each(aspects, &Manager.register_aspect/1)
+
+    world = start_link_supervised!(World)
+
+    {:ok, world: world, aspects: aspects}
   end
 
   describe "fetch/1" do
-    test "returns empty when no aspects were registered" do
-      object = World.new()
+    test "returns empty when no aspects were registered", %{world: world} do
+      object = World.create(world)
 
       assert [] = World.fetch(object)
     end
 
-    test "returns all aspects for a given object" do
-      modules = [Health, Moniker, Position]
-      Enum.each(modules, &World.register_aspect/1)
-
-      object = World.new()
+    test "returns all aspects for a given object", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, current: 100)
       Position.attach(object, x: 10, y: 20)
       Moniker.attach(object, name: "Object")
 
-      aspects = [
-        %Moniker{name: "Object"},
-        %Position{y: 20, x: 10},
-        %Health{current: 100}
-      ]
+      aspects = World.fetch(object)
 
-      assert ^aspects = World.fetch(object)
+      assert [
+               %Health{current: 100},
+               %Moniker{name: "Object"},
+               %Position{y: 20, x: 10}
+             ] = Enum.sort(aspects)
     end
   end
 
-  test "register_aspect/1" do
-    assert :ok = World.register_aspect(Health)
-    assert :ok = World.register_aspect(Moniker)
-    assert :ok = World.register_aspect(Position)
-  end
+  describe "fetch/2" do
+    test "returns nil for unkown objects", %{world: world} do
+      object = make_ref()
 
-  describe "list_aspects/0" do
-    test "returns empty when no aspects were registered" do
-      assert [] = World.list_aspects()
+      assert World.fetch(world, object) == nil
     end
 
-    test "returns all registered aspects" do
-      modules = [Health, Moniker, Position]
-      Enum.each(modules, &World.register_aspect/1)
+    test "returns all aspects for a given object", %{world: world} do
+      object = World.create(world)
 
-      # Map the aspect definitions to their module names.
-      # Ensure aspects are returned in the registration order.
-      assert ^modules = Enum.map(World.list_aspects(), &elem(&1, 0))
+      Health.attach(object, current: 100)
+      Position.attach(object, x: 10, y: 20)
+      Moniker.attach(object, name: "Object")
+
+      aspects = World.fetch(world, object)
+
+      assert [
+               %Health{current: 100},
+               %Moniker{name: "Object"},
+               %Position{y: 20, x: 10}
+             ] = Enum.sort(aspects)
     end
   end
 
   describe "list_objects" do
-    test "with aspects as list" do
-      modules = [Health, Moniker, Position]
-      Enum.each(modules, &World.register_aspect/1)
-
-      object = World.new()
+    test "with aspects as list", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, current: 100)
       Position.attach(object, x: 10, y: 20)
       Moniker.attach(object, name: "Object")
 
-      assert [{^object, aspects}] = World.list_objects(aspects_as: :list)
+      stream = World.list_objects(aspects_as: :list)
+
+      assert [{^object, aspects}] = Enum.to_list(stream)
 
       assert [
+               %Health{current: 100},
                %Moniker{name: "Object"},
-               %Position{x: 10, y: 20},
-               %Health{current: 100}
-             ] = aspects
+               %Position{x: 10, y: 20}
+             ] = Enum.sort(aspects)
     end
 
-    test "with aspects as map" do
-      modules = [Health, Moniker, Position]
-      Enum.each(modules, &World.register_aspect/1)
-
-      object = World.new()
+    test "with aspects as map", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, current: 100)
       Position.attach(object, x: 10, y: 20)
       Moniker.attach(object, name: "Object")
 
-      assert [{^object, aspects}] = World.list_objects(aspects_as: :map)
+      stream = World.list_objects(aspects_as: :map)
 
-      assert %{
-               "health" => %{maximum: nil, current: 100},
-               "moniker" => %{name: "Object", description: nil},
-               "position" => %{y: 20, x: 10}
-             } = aspects
+      assert [{^object, aspects}] = Enum.to_list(stream)
+
+      assert %{y: 20, x: 10} = aspects["position"]
+      assert %{maximum: nil, current: 100} = aspects["health"]
+      assert %{name: "Object", description: nil} = aspects["moniker"]
     end
   end
 
-  test "clone/1" do
-    modules = [Health, Moniker, Position]
-    Enum.each(modules, &World.register_aspect/1)
-
-    object = World.new()
+  test "create/1", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
     Position.attach(object, x: 10, y: 20)
     Moniker.attach(object, name: "Object")
 
-    clone = World.clone(object)
+    aspects = World.fetch(world, object)
+
+    assert [
+             %Health{current: 100},
+             %Moniker{name: "Object"},
+             %Position{x: 10, y: 20}
+           ] = Enum.sort(aspects)
+  end
+
+  test "create/2", %{world: world} do
+    Manager.register_prefab(%{
+      name: "Being",
+      aspects: %{
+        "health" => %{current: 100, maximum: 100},
+        "moniker" => %{name: "Being"},
+        "position" => %{x: 10, y: 20},
+        "selectable" => %{}
+      }
+    })
+
+    Manager.register_prefab(%{
+      name: "Human",
+      inherits: ["Being"],
+      aspects: %{
+        "health" => %{current: 50},
+        "moniker" => %{name: "John Doe"},
+        "position" => %{x: 100, y: 200}
+      }
+    })
+
+    object = World.create(world, "Human")
+
+    aspects = World.fetch(object)
+
+    assert [
+             %Selectable{},
+             %Health{current: 50, maximum: 100},
+             %Moniker{name: "John Doe"},
+             %Position{x: 100, y: 200}
+           ] = Enum.sort(aspects)
+  end
+
+  test "clone/1", %{world: world} do
+    object = World.create(world)
+
+    Health.attach(object, current: 100)
+    Position.attach(object, x: 10, y: 20)
+    Moniker.attach(object, name: "Object")
+
+    clone = World.clone(world, object)
 
     assert clone != object
     assert Health.get(clone) == Health.get(object)
@@ -123,178 +168,26 @@ defmodule Genesis.WorldTest do
     assert World.fetch(clone) == World.fetch(object)
   end
 
-  test "destroy/1" do
-    modules = [Health, Moniker, Position]
-    Enum.each(modules, &World.register_aspect/1)
+  describe "destroy/1" do
+    test "removes object and its aspects", %{world: world} do
+      object = World.create(world)
 
-    object = World.new()
+      Health.attach(object, current: 100)
+      Position.attach(object, x: 10, y: 20)
+      Moniker.attach(object, name: "Object")
 
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
+      assert :ok = World.destroy(world, object)
 
-    World.destroy(object)
+      refute Health.get(object)
+      refute Position.get(object)
+      refute Moniker.get(object)
 
-    refute Health.get(object)
-    refute Position.get(object)
-    refute Moniker.get(object)
-
-    assert [] = World.fetch(object)
-  end
-
-  test "send/1" do
-    modules = [Health, Moniker, Position]
-    Enum.each(modules, &World.register_aspect/1)
-
-    object = World.new()
-
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
-
-    events = [:move, :damage, :describe]
-
-    Enum.each(events, &World.send(object, &1))
-
-    flushed = Enum.map(events, &{&1, object})
-
-    assert ^flushed = World.flush()
-  end
-
-  describe "prefabs" do
-    test "create prefab with map and default alias" do
-      modules = [Health, Moniker, Position, Selectable]
-      Enum.each(modules, &World.register_aspect/1)
-
-      prefab = %{
-        name: "Being",
-        aspects: %{
-          "health" => %{current: 100},
-          "moniker" => %{name: "Being"},
-          "position" => %{x: 10, y: 20},
-          "selectable" => %{}
-        }
-      }
-
-      World.register_prefab(prefab)
-
-      object = World.create("Being")
-
-      aspects = [
-        %Selectable{},
-        %Health{current: 100},
-        %Position{y: 20, x: 10},
-        %Moniker{name: "Being"}
-      ]
-
-      assert ^aspects = World.fetch(object)
+      assert [] = World.fetch(object)
     end
 
-    test "create prefab with list with alias" do
-      modules = [
-        {"prefix::health", Health},
-        {"prefix::moniker", Moniker},
-        {"prefix::position", Position},
-        {"prefix::selectable", Selectable}
-      ]
-
-      Enum.each(modules, &World.register_aspect/1)
-
-      prefab = %{
-        name: "Being",
-        aspects: [
-          {"prefix::health", %{current: 100}},
-          {"prefix::moniker", %{name: "Being"}},
-          {"prefix::position", %{x: 10, y: 20}},
-          {"prefix::selectable", %{}}
-        ]
-      }
-
-      World.register_prefab(prefab)
-
-      object = World.create("Being")
-
-      aspects = [
-        %Selectable{},
-        %Health{current: 100},
-        %Position{y: 20, x: 10},
-        %Moniker{name: "Being"}
-      ]
-
-      assert ^aspects = World.fetch(object)
-    end
-
-    test "create prefab with keyword list" do
-      modules = [
-        health: Health,
-        moniker: Moniker,
-        position: Position,
-        selectable: Selectable
-      ]
-
-      Enum.each(modules, &World.register_aspect/1)
-
-      prefab = %{
-        name: "Being",
-        aspects: [
-          health: %{current: 100},
-          moniker: %{name: "Being"},
-          position: %{x: 10, y: 20},
-          selectable: %{}
-        ]
-      }
-
-      World.register_prefab(prefab)
-
-      object = World.create("Being")
-
-      aspects = [
-        %Selectable{},
-        %Health{current: 100},
-        %Position{y: 20, x: 10},
-        %Moniker{name: "Being"}
-      ]
-
-      assert ^aspects = World.fetch(object)
-    end
-
-    test "registers children prefab" do
-      modules = [Health, Moniker, Position, Selectable]
-      Enum.each(modules, &World.register_aspect/1)
-
-      prefab1 = %{
-        name: "Being",
-        aspects: %{
-          "health" => %{current: 100, maximum: 100},
-          "moniker" => %{name: "Being"},
-          "position" => %{x: 10, y: 20},
-          "selectable" => %{}
-        }
-      }
-
-      prefab2 = %{
-        name: "Human",
-        inherits: ["Being"],
-        aspects: %{
-          "health" => %{current: 50},
-          "moniker" => %{name: "John Doe"},
-          "position" => %{x: 100, y: 200}
-        }
-      }
-
-      World.register_prefab(prefab1)
-      World.register_prefab(prefab2)
-
-      object = World.create("Human")
-
-      aspects = [
-        %Selectable{},
-        %Health{current: 50, maximum: 100},
-        %Position{x: 100, y: 200},
-        %Moniker{name: "John Doe"}
-      ]
-
-      assert ^aspects = World.fetch(object)
+    test "returns noop for unkown objects", %{world: world} do
+      object = make_ref()
+      assert :noop = World.destroy(world, object)
     end
   end
 end

@@ -4,13 +4,14 @@ defmodule Genesis.Aspect do
   Aspects are modular pieces of state or behavior that can be attached to objects.
   """
   alias __MODULE__
-  alias Genesis.World
-  alias Genesis.Context
+  alias Genesis.ETS
+  alias Genesis.Manager
 
+  @type event :: Genesis.Event.t()
+  @type props :: keyword() | map()
   @type object :: integer() | atom() | binary()
-  @type props :: Enumerable.t()
 
-  @optional_callbacks handle_event: 3
+  @optional_callbacks handle_event: 1
 
   @doc """
   Initializes the aspect ETS table.
@@ -25,6 +26,12 @@ defmodule Genesis.Aspect do
   @callback new(props()) :: struct()
 
   @doc """
+  Called when an aspect is attached, removed, replaced, or updated on an object.
+  Receives the hook name, the object, and the aspect struct that triggered the hook.
+  """
+  @callback on_hook(atom(), object(), struct()) :: any()
+
+  @doc """
   Casts the given properties into a map of permitted values.
   This function normalizes input that can be used to create an aspect.
   """
@@ -32,18 +39,20 @@ defmodule Genesis.Aspect do
 
   @doc """
   Attaches an aspect to an object.
+  Returns `:ok` if the aspect was successfully attached, `:noop` if an aspect with the same props
+  is already attached, or `:error` if the same aspect with different props is already attached.
   """
-  @callback attach(object(), props()) :: :ok
+  @callback attach(object(), props()) :: :ok | :noop | :error
 
   @doc """
-  Updates an aspect attached to an object.
+  Replaces an aspect attached to an object.
   Will return `:noop` if the aspect is not present.
   """
-  @callback update(object(), props()) :: :ok | :noop
+  @callback replace(object(), props()) :: :ok | :noop
 
   @doc """
   Updates a specific property of an aspect attached to the object.
-  Will return `:noop` if the aspect is not present or `error` if the property does not exist.
+  Will return `:noop` if the aspect is not present or `:error` if the property does not exist.
   """
   @callback update(object(), atom(), fun()) :: :ok | :noop | :error
 
@@ -52,6 +61,17 @@ defmodule Genesis.Aspect do
   Returns `:noop`  if the aspect is not present.
   """
   @callback remove(object()) :: :ok | :noop
+
+  @doc """
+  Returns all aspects of the given type.
+  Returns a list of tuples containing the object and the aspect struct.
+
+  ## Examples
+
+      iex> Health.all()
+      [{1, %Health{current: 100}}, {2, %Health{current: 50}}]
+  """
+  @callback all() :: list({object(), struct()})
 
   @doc """
   Retrieves the aspect attached to an object.
@@ -68,17 +88,6 @@ defmodule Genesis.Aspect do
   Same as `get/1`, but returns a default value if the aspect is not present.
   """
   @callback get(object(), any()) :: struct() | any()
-
-  @doc """
-  Returns all aspects of the given type.
-  Returns a list of tuples containing the object and the aspect struct.
-
-  ## Examples
-
-      iex> Health.all()
-      [{1, %Health{current: 100}}, {2, %Health{current: 50}}]
-  """
-  @callback all() :: list({object(), struct()})
 
   @doc """
   Returns true if the aspect is attached to the given object.
@@ -106,7 +115,7 @@ defmodule Genesis.Aspect do
   @callback at_most(atom(), integer()) :: list({object(), struct()})
 
   @doc """
-  Returns all aspects that have the given property with a value between the given minimum and maximum.
+  Returns all aspects that have the given property with a value between the given minimum and maximum (inclusive).
 
   ## Examples
 
@@ -133,26 +142,30 @@ defmodule Genesis.Aspect do
   function should return a tuple with `:cont` or `:halt` to either keep processing
   the event or stop propagating the event to the remaining aspects in the pipeline.
   """
-  @callback handle_event(atom(), object(), map()) ::
-              {:cont, map()} | {:halt, map()}
+  @callback handle_event(event()) :: {:cont, event()} | {:halt, event()}
 
   defmacro __using__(opts \\ []) do
     quote bind_quoted: [opts: opts] do
       @behaviour Aspect
       @before_compile Aspect
 
-      @table_name __MODULE__
+      @table __MODULE__
       @events Keyword.get(opts, :events, [])
-
-      import Genesis.Value
 
       Module.register_attribute(__MODULE__, :properties, accumulate: true)
 
+      defguard is_props(term) when is_list(term) or is_non_struct_map(term)
+
+      import Genesis.Value, only: [prop: 2, prop: 3]
+
       def init() do
-        {Context.init(@table_name), @events}
+        opts = [:set, :named_table, read_concurrency: true]
+        {Genesis.ETS.new(@table, opts), @events}
       end
 
       def new(attrs \\ []), do: struct!(__MODULE__, cast(attrs))
+
+      def on_hook(hook, object, aspect) when is_atom(hook), do: :ok
 
       def attach(object), do: attach(object, %{})
 
@@ -160,100 +173,82 @@ defmodule Genesis.Aspect do
         do: attach(object, __MODULE__.new(properties))
 
       def attach(object, %{__struct__: __MODULE__} = aspect),
-        do: World.send(object, :"$attach", aspect)
+        do: Manager.attach_aspect(object, aspect)
 
-      def remove(object) do
-        case Context.get(@table_name, object) do
-          nil -> :noop
-          aspect -> World.send(object, :"$remove", aspect)
-        end
-      end
+      def remove(object), do: Manager.remove_aspect(object, __MODULE__)
 
-      def update(object, properties) when is_props(properties) do
-        permitted = cast(properties)
+      def replace(object, properties) when is_props(properties),
+        do: Manager.replace_aspect(object, __MODULE__, properties)
 
-        case Context.get(@table_name, object) do
-          nil -> :noop
-          aspect -> World.send(object, :"$update", Map.merge(aspect, permitted))
-        end
-      end
+      def update(object, property, fun) when is_atom(property) and is_function(fun, 1),
+        do: Manager.update_aspect(object, __MODULE__, property, fun)
 
-      def update(object, property, fun) when is_atom(property) and is_function(fun, 1) do
-        case Context.get(@table_name, object) do
-          nil ->
-            :noop
+      def all(), do: ETS.list(@table)
 
-          %{^property => value} = aspect ->
-            World.send(object, :"$update", Map.put(aspect, property, fun.(value)))
+      def get(object, default \\ nil), do: ETS.get(@table, object, default)
 
-          _aspect ->
-            :error
-        end
-      end
-
-      def get(object, default \\ nil) do
-        Context.get(@table_name, object, default)
-      end
-
-      def all(), do: Context.all(@table_name)
-
-      def exists?(object) do
-        Context.exists?(@table_name, object)
-      end
+      def exists?(object), do: ETS.exists?(@table, object)
 
       def at_least(property, min) when is_integer(min) do
-        validate_properties!([{property, min}])
-        Context.at_least(@table_name, property, min)
+        ensure_props!([{property, min}])
+        ETS.at_least(@table, property, min)
       end
 
       def at_most(property, max) when is_integer(max) do
-        validate_properties!([{property, max}])
-        Context.at_most(@table_name, property, max)
+        ensure_props!([{property, max}])
+        ETS.at_most(@table, property, max)
       end
 
       def between(property, min, max) when is_integer(min) and is_integer(max) do
-        validate_properties!([{property, min}, {property, max}])
-        Context.between(@table_name, property, min, max)
+        ensure_props!([{property, min}, {property, max}])
+        ETS.between(@table, property, min, max)
       end
 
       def match(properties) when is_props(properties) do
-        validate_properties!(properties)
-        Context.match(@table_name, properties)
+        ensure_props!(properties)
+        ETS.match(@table, properties)
       end
 
-      defoverridable new: 0, new: 1
+      defoverridable new: 0, new: 1, on_hook: 3
     end
   end
 
   defmacro __before_compile__(env) do
     quote do
-      defstruct to_fields(@properties)
+      defstruct Genesis.Value.defaults(@properties)
 
-      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 3}) do
+      def __aspect__(:table), do: @table
+      def __aspect__(:events), do: @events
+      def __aspect__(:properties), do: @properties
+
+      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 1}) do
         raise CompileError,
           file: unquote(env.file),
           line: unquote(env.line),
           description: """
-          Aspect #{unquote(env.module)} defines handle_event/3 but does not specify any events.
+          Aspect #{unquote(env.module)} defines handle_event/1 but does not specify any events.
           Please specify the events this aspect handles using `use Genesis.Aspect, events: [:event1, :event2]`.
           """
       end
 
-      def cast(attrs), do: cast(attrs, @properties)
+      def cast(attrs), do: Genesis.Value.cast(attrs, @properties)
 
-      defp validate_properties!(pairs) do
+      defp ensure_props!(pairs) do
         valid_props = Map.new(@properties, fn {name, type, _opts} -> {name, type} end)
 
-        for {property, value} <- pairs do
+        Enum.each(pairs, fn {property, value} ->
           case Map.fetch(valid_props, property) do
             {:ok, type} ->
-              check_value!(value, type)
+              Genesis.Value.ensure_type!(value, type)
 
             :error ->
               raise ArgumentError,
-                    "Property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}"
+                    """
+                    The property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}.
+                    Perhaps you meant to use one of the following instead: #{inspect(Map.keys(valid_props))}
+                    """
           end
-        end
+        end)
       end
     end
   end

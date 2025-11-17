@@ -2,16 +2,21 @@ defmodule Genesis.AspectTest do
   use ExUnit.Case
 
   alias Genesis.World
+  alias Genesis.Manager
   alias Genesis.Aspects.Health
   alias Genesis.Aspects.Moniker
   alias Genesis.Aspects.Position
   alias Genesis.Aspects.Selectable
 
   setup do
-    on_exit(fn -> World.reset() end)
+    on_exit(fn -> Manager.reset() end)
+
     aspects = [Health, Moniker, Position, Selectable]
-    Enum.each(aspects, &World.register_aspect/1)
-    {:ok, aspects: aspects}
+    Enum.each(aspects, &Manager.register_aspect/1)
+
+    world = start_link_supervised!(World)
+
+    {:ok, world: world, aspects: aspects}
   end
 
   test "new/0" do
@@ -29,33 +34,43 @@ defmodule Genesis.AspectTest do
   end
 
   describe "attach/1" do
-    test "with a map" do
-      object = World.new()
+    test "with a map", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, %{current: 100})
 
       assert [%Health{current: 100}] = World.fetch(object)
     end
 
-    test "with a keyword list" do
-      object = World.new()
+    test "with a keyword list", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, current: 100)
 
       assert [%Health{current: 100}] = World.fetch(object)
     end
 
-    test "with a struct" do
-      object = World.new()
+    test "with a struct", %{world: world} do
+      object = World.create(world)
 
       Health.attach(object, %Health{current: 100})
 
       assert [%Health{current: 100}] = World.fetch(object)
     end
+
+    test "aspect is not attached twice", %{world: world} do
+      object = World.create(world)
+
+      Health.attach(object, current: 50)
+
+      assert :noop = Health.attach(object, current: 50)
+      assert :error = Health.attach(object, current: 100)
+      assert [%Health{current: 50}] = World.fetch(object)
+    end
   end
 
-  test "get/1" do
-    object = World.new()
+  test "get/1", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
 
@@ -63,8 +78,8 @@ defmodule Genesis.AspectTest do
     assert %Health{current: 100} = Health.get(object)
   end
 
-  test "get/2" do
-    object = World.new()
+  test "get/2", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
 
@@ -72,8 +87,8 @@ defmodule Genesis.AspectTest do
     assert %Health{current: 100} = Health.get(object)
   end
 
-  test "remove/1" do
-    object = World.new()
+  test "remove/1", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
     Moniker.attach(object, name: "Object")
@@ -83,31 +98,33 @@ defmodule Genesis.AspectTest do
     refute Health.get(object)
   end
 
-  test "update/2" do
-    object = World.new()
+  test "replace/2", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
 
-    Health.update(object, current: 50)
+    Health.replace(object, current: 50)
+
     assert %Health{current: 50} = Health.get(object)
-    assert :noop = Moniker.update(object, name: "New Name")
+    assert :noop = Moniker.replace(object, name: "New Name")
   end
 
-  test "update/3" do
-    object = World.new()
+  test "update/3", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
 
     Health.update(object, :current, &(&1 - 25))
+
     assert %Health{current: 75} = Health.get(object)
-    assert :noop = Moniker.update(object, name: "New Name")
+    assert :noop = Moniker.update(object, :name, & &1)
     assert :error = Health.update(object, :foo, &(&1 + 10))
   end
 
-  test "all/1" do
-    object_1 = World.new()
-    object_2 = World.new()
-    object_3 = World.new()
+  test "all/1", %{world: world} do
+    object_1 = World.create(world)
+    object_2 = World.create(world)
+    object_3 = World.create(world)
 
     Health.attach(object_1, current: 100)
     Health.attach(object_2, current: 100)
@@ -117,8 +134,8 @@ defmodule Genesis.AspectTest do
     assert [object_1, object_2, object_3] == Enum.sort(result)
   end
 
-  test "exists?/1" do
-    object = World.new()
+  test "exists?/1", %{world: world} do
+    object = World.create(world)
 
     Health.attach(object, current: 100)
 
@@ -126,9 +143,9 @@ defmodule Genesis.AspectTest do
     assert not Moniker.exists?(object)
   end
 
-  test "at_least/2" do
-    object_1 = World.new()
-    object_2 = World.new()
+  test "at_least/2", %{world: world} do
+    object_1 = World.create(world)
+    object_2 = World.create(world)
 
     Health.attach(object_1, current: 10)
     Health.attach(object_2, current: 50)
@@ -137,9 +154,9 @@ defmodule Genesis.AspectTest do
     assert_raise ArgumentError, fn -> Health.at_least(:invalid, 50) end
   end
 
-  test "at_most/2" do
-    object_1 = World.new()
-    object_2 = World.new()
+  test "at_most/2", %{world: world} do
+    object_1 = World.create(world)
+    object_2 = World.create(world)
 
     Health.attach(object_1, current: 10)
     Health.attach(object_2, current: 50)
@@ -148,9 +165,9 @@ defmodule Genesis.AspectTest do
     assert_raise ArgumentError, fn -> Health.at_most(:invalid, 10) end
   end
 
-  test "between/3" do
-    object_1 = World.new()
-    object_2 = World.new()
+  test "between/3", %{world: world} do
+    object_1 = World.create(world)
+    object_2 = World.create(world)
 
     Health.attach(object_1, current: 10)
     Health.attach(object_2, current: 50)
@@ -160,9 +177,9 @@ defmodule Genesis.AspectTest do
     assert_raise ArgumentError, fn -> Health.between(:invalid, 5, 15) end
   end
 
-  test "match/1" do
-    object_1 = World.new()
-    object_2 = World.new()
+  test "match/1", %{world: world} do
+    object_1 = World.create(world)
+    object_2 = World.create(world)
 
     Health.attach(object_1, current: 100, maximum: 100)
     Health.attach(object_2, current: 0, maximum: 100)

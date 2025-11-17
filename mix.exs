@@ -23,7 +23,7 @@ defmodule Genesis.MixProject do
 
   defp description() do
     """
-    An Entity Component System (ECS) for Elixir focused on easy of use and ergonomics.
+    An Entity Component System (ECS) for Elixir focused on ease of use and ergonomics.
     """
   end
 
@@ -56,6 +56,7 @@ defmodule Genesis.MixProject do
 
   defp deps do
     [
+      {:gen_stage, "~> 1.3"},
       {:ex_doc, "~> 0.37", only: :dev, runtime: false}
     ]
   end

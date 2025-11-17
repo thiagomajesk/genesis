@@ -1,11 +1,11 @@
 # Genesis
 
-Genesis is an ECS (Entity Component System) library for Elixir focused on easy of use and ergonomics. This library is heavily inspired by the architecture used in the game [Caves of Qud](https://www.cavesofqud.com/) and [ADOM (Ancient Domains of Mystery)](https://www.adom.de/).
+Genesis is an ECS (Entity Component System) library for Elixir focused on ease of use and ergonomics. This library is heavily inspired by the architecture used in the game [Caves of Qud](https://www.cavesofqud.com/) and [ADOM (Ancient Domains of Mystery)](https://www.adom.de/).
 
 > [!TIP]
 > If you don't yet know what an Entity Component System is, the [ECS FAQ repository](https://github.com/SanderMertens/ecs-faq) from the creator of [Flecs](https://www.flecs.dev/) (a very popular ECS library) is a very good resource to get a good overview.
 
-In the case of Genesis, the ECS terminology is used quite loosely as we don't make any assumptions about your game loop looks like. Genesis was created to take advantage Elixir strenghts to create an event-driven architecture that is very usefull for building turn-based games. In fact, the whole idea for this library is based on these talks from Thomas Biskup and Briand Bucklew:
+In the case of Genesis, the ECS terminology is used quite loosely as we don't make any assumptions about what your game loop looks like. Genesis was created to take advantage of Elixir strengths to create an event-driven architecture that is very useful for building certain types of games. In fact, the whole idea for this library is based on the following talks from Thomas Biskup and Brian Bucklew:
 
 - [AI in Qud and Sproggiwood](https://www.youtube.com/watch?v=4uxN5GqXcaA)
 - [Data-Driven Engines of Qud and Sproggiwood](https://www.youtube.com/watch?v=U03XXzcThGU)
@@ -16,29 +16,94 @@ In the case of Genesis, the ECS terminology is used quite loosely as we don't ma
 ```elixir
 def deps do
   [
-    {:genesis, "~> 0.1.0"}
+    {:genesis, "~> 0.5.1"}
   ]
 end
 ```
 
-## Benchmarking
+## Getting Started
 
-There's a benchmarking script available to measure how the library performs under load. You can run it before deciding if it fits your use case or not. The script will output information about the processes spawned and BEAM statistics to help you understand resource usage.
+This tutorial will walk you through creating a combat system where a sword can attack and potentially ignite a flammable barrel.
 
-**Parameters**:
+### Defining Aspects
 
-- `--objects`: The total number of objects to create
-- `--duration`: How long to run the benchmark (in seconds)
-- `--interval`: Interval to send events to objects (in milliseconds)
+Aspects are modular pieces of behavior that can be attached to game objects. Let's start with a `Durability` aspect that handles damage:
 
-```bash
-# or mix run bench.exs --o 1000 --d 10 --i 10
-mix run bench.exs --objects 1000 --duration 10 --interval 10
+```elixir
+defmodule Durability do
+  use Genesis.Aspect, events: [:attack]
+
+  prop :durability, :integer, default: 100
+
+  def handle_event(%{name: :attack} = event) do
+    update(event.object, :durability, &(&1 - event.args.damage))
+    {:cont, event}
+  end
+end
 ```
 
-> The example above will simulate a scenario where a thousand objects receives a single event every 10 milliseconds during the period of 10 seconds.
+Next, let's create a `Flammable` aspect that can be ignited by fire damage:
 
-We also have a demo script that you can run to quickly see the library in action, execute it with `elixir demo.exs` and then open your browser at: `http://localhost:4000` (LiveDashboard is also available at `/dashboard`).
+```elixir
+defmodule Flammable do
+  use Genesis.Aspect, events: [:attack]
+
+  prop :burning, :boolean, default: false
+
+  def handle_event(%{name: :attack} = event) do
+    if event.args.type == :fire do
+      replace(event.object, :burning, true)
+    end
+    {:cont, event}
+  end
+end
+```
+
+### Registering Aspects
+
+Before using aspects, they need to be registered with the manager:
+
+```elixir
+Genesis.Manager.register_aspect(Durability)
+Genesis.Manager.register_aspect(Flammable)
+```
+
+### Starting a World and Creating Objects
+
+Now we can create a world, instantiate objects, and attach aspects:
+
+```elixir
+{:ok, world} = Genesis.World.start_link()
+
+barrel = Genesis.World.create(world)
+
+Flammable.attach(barrel)
+Durability.attach(barrel, durability: 50)
+```
+
+### Dispatching Events
+
+Let's attack the barrel with different weapons:
+
+```elixir
+Genesis.World.send(world, barrel, :attack, %{damage: 10, type: :physical})
+
+Durability.get(barrel)
+#=> %Durability{durability: 40}
+
+Flammable.get(barrel)
+#=> %Flammable{burning: false}
+
+Genesis.World.send(world, barrel, :attack, %{damage: 15, type: :fire})
+
+Durability.get(barrel)
+#=> %Durability{durability: 25}
+
+Flammable.get(barrel)
+#=> %Flammable{burning: true}
+```
+
+This example demonstrates the core Genesis workflow: defining aspects with behavior, registering them, instantiating objects in a world, attaching aspects, and dispatching events to drive game logic.
 
 ## Special Thanks ❤️
 
@@ -46,5 +111,5 @@ A big thanks to both Brian Bucklew and Thomas Biskup for the inspiring talks. Th
 
 Special thanks to other ECS libraries that influenced the development of Genesis:
 
-- [Geotic](https://github.com/ddmills/geotic) - A friendly JavaScript ECS library that is also based on the the Briand Bucklew and Thomas Biskup talks. Finding this library in the midst of traditional ECS implementations was a breath of fresh.
+- [Geotic](https://github.com/ddmills/geotic) - A friendly JavaScript ECS library that is also based on the Brian Bucklew and Thomas Biskup talks. Finding this library in the midst of traditional ECS implementations was a breath of fresh air.
 - [ECSx](https://github.com/ecsx-framework/ECSx) - Another excellent ECS library with a more traditional approach. ECSx paved the way as one of the very first Elixir implementations. It greatly impacted some of Genesis's design choices.
