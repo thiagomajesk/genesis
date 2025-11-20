@@ -99,13 +99,13 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def init(_args) do
-    {:ok, herald} = Genesis.Herald.start_link([])
+  def init(opts) do
+    {:ok, herald} = Genesis.Herald.start_link(opts)
     {:ok, %{herald: herald, objects: MapSet.new()}}
   end
 
   @impl true
-  def handle_call({:send, object, {event, args}}, _from, state) do
+  def handle_call({:send, object, {event, args}}, {pid, _tag}, state) do
     case lookup_handlers(object, event) do
       [] ->
         {:reply, :noop, state}
@@ -118,6 +118,7 @@ defmodule Genesis.World do
           name: event,
           world: self(),
           object: object,
+          from: pid,
           args: args,
           handlers: handlers
         }

@@ -1,6 +1,6 @@
 defmodule Genesis.Event do
-  @enforce_keys [:name, :world, :object]
-  defstruct [:name, :world, :object, :args, handlers: []]
+  @enforce_keys [:name, :world, :object, :from]
+  defstruct [:name, :world, :object, :from, args: %{}, handlers: []]
 
   alias __MODULE__
 

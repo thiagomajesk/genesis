@@ -19,21 +19,6 @@ defmodule Genesis.WorldTest do
     {:ok, world: world, aspects: aspects}
   end
 
-  test "send", %{world: world} do
-    object = World.create(world)
-
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
-
-    # World.send(world, object, :move)
-    # World.send(world, object, :damage)
-    World.send(world, object, :describe)
-    # World.send(world, object, :unknown_event)
-
-    Process.sleep(:infinity)
-  end
-
   describe "fetch/1" do
     test "returns empty when no aspects were registered", %{world: world} do
       object = World.create(world)

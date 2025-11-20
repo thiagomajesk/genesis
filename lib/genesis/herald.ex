@@ -1,8 +1,8 @@
 defmodule Genesis.Herald do
   use GenStage
 
-  def start_link(events) do
-    GenStage.start_link(__MODULE__, events)
+  def start_link(opts) do
+    GenStage.start_link(__MODULE__, opts)
   end
 
   def notify(server, event) do
@@ -10,15 +10,30 @@ defmodule Genesis.Herald do
   end
 
   @impl true
-  def init(_args) do
-    partitions = System.schedulers_online()
+  def init(opts) do
+    max_events = Access.get(opts, :max_events, 1_000)
+    partitions = Access.get(opts, :partitions, System.schedulers_online())
 
     Enum.each(0..(partitions - 1), fn partition ->
-      Genesis.Scribe.start_link(herald: self(), partition: partition)
+      Genesis.Scribe.start_link(
+        herald: self(),
+        partition: partition,
+        max_events: max_events
+      )
     end)
 
+    # Use same hashing strategy as PartitionSupervisor, so the same object is always
+    # processed by the same partition (Scribe). The only difference from the default
+    # `GenStage.PartitionDispatcher` implementation is that in our case the object is
+    # the significant part of the event, so that's what we care about when hashing.
+    hash = fn event ->
+      if is_integer(event.object),
+        do: {event, rem(abs(event.object), partitions)},
+        else: {event, :erlang.phash2(event.object, partitions)}
+    end
+
     {:producer, {:queue.new(), 0},
-     dispatcher: {GenStage.PartitionDispatcher, partitions: partitions}}
+     dispatcher: {GenStage.PartitionDispatcher, partitions: partitions, hash: hash}}
   end
 
   @impl true
