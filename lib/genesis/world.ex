@@ -120,7 +120,8 @@ defmodule Genesis.World do
           object: object,
           from: pid,
           args: args,
-          handlers: handlers
+          handlers: handlers,
+          timestamp: :erlang.system_time()
         }
 
         Genesis.Herald.notify(state.herald, event)

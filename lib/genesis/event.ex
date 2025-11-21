@@ -1,6 +1,11 @@
 defmodule Genesis.Event do
-  @enforce_keys [:name, :world, :object, :from]
-  defstruct [:name, :world, :object, :from, args: %{}, handlers: []]
+  @moduledoc """
+  Defines the structure and processing of events within the Genesis framework.
+  Events represent actions affecting objects in the system and contain information about
+  their origin, target object, and associated data which can be processed by handlers.
+  """
+  @enforce_keys [:name, :world, :object, :from, :timestamp]
+  defstruct [:name, :world, :object, :from, :timestamp, args: %{}, handlers: []]
 
   alias __MODULE__
 
