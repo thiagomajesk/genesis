@@ -100,7 +100,25 @@ defmodule Genesis.World do
 
   @impl true
   def init(opts) do
-    {:ok, herald} = Genesis.Herald.start_link(opts)
+    max_events = Access.get(opts, :max_events, 1000)
+    partitions = Access.get(opts, :partitions, System.schedulers_online())
+
+    {:ok, supervisor} = Supervisor.start_link([], strategy: :one_for_one)
+
+    {:ok, herald} = Supervisor.start_child(supervisor, {Genesis.Herald, partitions: partitions})
+
+    Enum.each(0..(partitions - 1), fn partition ->
+      envoy_child_spec = Supervisor.child_spec(Genesis.Envoy, id: {:envoy, partition})
+      {:ok, envoy} = Supervisor.start_child(supervisor, envoy_child_spec)
+
+      GenStage.async_subscribe(envoy, to: herald, partition: partition)
+
+      scribe_child_spec = Supervisor.child_spec(Genesis.Scribe, id: {:scribe, partition})
+      {:ok, scribe} = Supervisor.start_child(supervisor, scribe_child_spec)
+
+      GenStage.async_subscribe(scribe, to: envoy, max_demand: max_events)
+    end)
+
     {:ok, %{herald: herald, objects: MapSet.new()}}
   end
 
@@ -111,16 +129,13 @@ defmodule Genesis.World do
         {:reply, :noop, state}
 
       modules ->
-        # Ensure registration order
-        handlers = Enum.reverse(modules)
-
         event = %Genesis.Event{
           name: event,
-          world: self(),
-          object: object,
           from: pid,
           args: args,
-          handlers: handlers,
+          world: self(),
+          object: object,
+          handlers: Enum.reverse(modules),
           timestamp: :erlang.system_time()
         }
 

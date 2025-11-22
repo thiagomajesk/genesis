@@ -7,9 +7,16 @@ defmodule Genesis.Event do
   @enforce_keys [:name, :world, :object, :from, :timestamp]
   defstruct [:name, :world, :object, :from, :timestamp, args: %{}, handlers: []]
 
-  alias __MODULE__
+  @doc """
+  Processes a list of events by invoking their respective handlers in order.
+  Each handler can choose to continue processing the event or halt further processing.
 
-  def process_event(%Event{} = event) do
+  NOTE: This function is mostly used internally to process object events and calling it directly
+  should be avoided unless there's a specific need to bypass the default event dispatching mechanism.
+  """
+  def process(events) when is_list(events), do: Enum.each(events, &process/1)
+
+  def process(event) when is_struct(event, __MODULE__) do
     Enum.reduce_while(event.handlers, event, fn module, event ->
       case maybe_handle_event(module, event) do
         {resp, event} when resp in [:cont, :halt] -> {resp, event}

@@ -11,16 +11,7 @@ defmodule Genesis.Herald do
 
   @impl true
   def init(opts) do
-    max_events = Access.get(opts, :max_events, 1_000)
-    partitions = Access.get(opts, :partitions, System.schedulers_online())
-
-    Enum.each(0..(partitions - 1), fn partition ->
-      Genesis.Scribe.start_link(
-        herald: self(),
-        partition: partition,
-        max_events: max_events
-      )
-    end)
+    partitions = Access.fetch!(opts, :partitions)
 
     # Use same hashing strategy as PartitionSupervisor, so the same object is always
     # processed by the same partition (Scribe). The only difference from the default

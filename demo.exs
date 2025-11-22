@@ -135,7 +135,7 @@ defmodule DemoLive do
      socket
      |> assign(:objects, [])
      |> assign(:world, nil)
-     |> assign(:tick_rate, 20)
+     |> assign(:tick_rate, 5)
      |> assign(:tick_count, 0)
      |> assign(:tick_timer, nil)
      |> assign(:max_objects, 1000)}
