@@ -5,7 +5,7 @@ defmodule Genesis.GenesisTest do
   alias Genesis.Manager
 
   defmodule Ping do
-    use Genesis.Aspect, events: [:check, :ping]
+    use Genesis.Aspect, events: [:ping, :check]
 
     def handle_event(event) do
       Process.sleep(Map.get(event.args, :delay, 0))
@@ -15,7 +15,7 @@ defmodule Genesis.GenesisTest do
   end
 
   defmodule Pong do
-    use Genesis.Aspect, events: [:check, :pong]
+    use Genesis.Aspect, events: [:pong, :check]
 
     def handle_event(event) do
       Process.sleep(Map.get(event.args, :delay, 0))
@@ -41,7 +41,8 @@ defmodule Genesis.GenesisTest do
     Pong.attach(object)
     Ping.attach(object)
 
-    World.send(world, object, :check)
+    # Aspects handling the same event will process the event
+    # repsecting the registration order (i.e: Ping -> Pong)
     World.send(world, object, :check)
 
     assert_receive {Ping, ^object, ping_time}
@@ -49,55 +50,48 @@ defmodule Genesis.GenesisTest do
 
     # Ensure that Ping was processed before Pong
     assert DateTime.before?(ping_time, pong_time),
-           "Expected Ping to be processed before Pong, but it was not."
+           "Expected Ping to be processed before Pong (respecting registration order)"
   end
 
-  describe "events dispatched to the same object" do
-    test "are handled sequentially", %{world: world} do
-      object = World.create(world)
+  test "events dispatched to the same object are handled sequentially", %{world: world} do
+    object = World.create(world)
 
-      Ping.attach(object)
-      Pong.attach(object)
+    Ping.attach(object)
+    Pong.attach(object)
 
-      # Simulate latency for Ping to prove that aspects will
-      # always be processed sequentially for the same object
-      World.send(world, object, :check, %{delay: 50})
-      World.send(world, object, :check)
+    # Simulate latency for Ping to prove that aspects will
+    # always be processed sequentially for the same object
+    World.send(world, object, :ping, %{delay: 50})
+    World.send(world, object, :pong)
 
-      assert_receive {Ping, ^object, ping_time}
-      assert_receive {Pong, ^object, pong_time}
+    assert_receive {Ping, ^object, ping_time}
+    assert_receive {Pong, ^object, pong_time}
 
-      # Ensure that Ping was processed before Pong
-      assert DateTime.before?(ping_time, pong_time),
-             "Expected Ping to be processed before Pong, but it was not."
-    end
+    # Ensure that Ping was processed before Pong (Ping -> Pong)
+    assert DateTime.before?(ping_time, pong_time),
+           "Expected Ping to be processed before Pong (objects aspects are sequential): #{inspect(ping_time)} | #{inspect(pong_time)}"
   end
 
-  describe "events dispatched to different objects" do
-    test "are handled concurrently", %{world: world} do
-      object1 = World.create(world)
-      object2 = World.create(world)
+  test "events dispatched to different objects are handled concurrently", %{world: world} do
+    object1 = World.create(world)
+    object2 = World.create(world)
 
-      Ping.attach(object1)
-      Pong.attach(object1)
+    Ping.attach(object1)
+    Pong.attach(object1)
 
-      Ping.attach(object2)
-      Pong.attach(object2)
+    Ping.attach(object2)
+    Pong.attach(object2)
 
-      World.send(world, object1, :check, %{delay: 50})
-      World.send(world, object2, :check, %{delay: 50})
+    # Simulate latency to prove that aspects for different objects
+    # are always processed concurrently and not waiting on each other
+    World.send(world, object1, :check, %{delay: :infinity})
+    World.send(world, object2, :check)
 
-      assert_receive {Ping, ^object1, object1_ping_time}
-      assert_receive {Pong, ^object1, object1_pong_time}
+    # Sanity check, to ensure that events are really blocked
+    refute_receive {Ping, ^object1, _object1_ping_time}
+    refute_receive {Pong, ^object1, _object1_pong_time}
 
-      assert_receive {Ping, ^object2, object2_ping_time}
-      assert_receive {Pong, ^object2, object2_pong_time}
-
-      refute DateTime.before?(object1_pong_time, object2_ping_time),
-             "Expected overlap but #{inspect(object1)} finished before #{inspect(object2)} started"
-
-      refute DateTime.before?(object2_pong_time, object1_ping_time),
-             "Expected overlap but #{inspect(object2)} finished before #{inspect(object1)} started"
-    end
+    assert_receive {Ping, ^object2, _object2_ping_time}
+    assert_receive {Pong, ^object2, _object2_pong_time}
   end
 end
