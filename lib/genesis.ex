@@ -42,33 +42,33 @@ defmodule Genesis do
 
   The topology looks like the following:
 
-      [World] --> [Herald] --> [Envoy] --> [Scribe] --> [Worker]
+        [World] --> [Herald] --> [Envoy] --> [Scribe] --> [Worker]
 
   Here's how events flow through the system (using 2 partitions as an example):
 
-  1) Events arrive at the World and are dispatched to the Herald:
+    1) Events arrive at the World and are dispatched to the Herald
 
-      :attack (O1) ──┐
-      :move (O1)   ──┤
-      :heal (O2)   ──┼─> [World] ---(notifies)---> [Herald]
-      :move (O3)   ──┤
-      :attack (O3) ──┘
+            object 1 :attack  ──┐
+            object 1 :move    ──┤
+            object 2 :heal    ──┼─> [World] ---(notifies)---> [Herald]
+            object 3 :move    ──┤
+            object 3 :attack  ──┘
 
-  2) The Herald routes them to partitions by hashing the object ID:
+    2) The Herald routes them to partitions by hashing the object ID:
 
-      Envoy 0 - [:move (O1), :attack (O1)]
-      Envoy 1 - [:heal (O2), :attack (O3), :move (O3)]
+            Envoy P0 - [{1, :move}, {1, :attack}]
+            Envoy P1 - [{2, :heal}, {3, :attack}, {3, :move}]
 
-  3) Each Envoy groups events per object in separate "lanes" (queues):
+    3) Each Envoy groups events per object in separate "lanes" (queues):
 
-      Envoy 0 - %{"O1" => [:move, :attack]}
-      Envoy 1 - %{"O2" => [:heal], "O3" => [:attack, :move]}
+            Envoy P0 - %{"1" => [:move, :attack]}
+            Envoy P1 - %{"2" => [:heal], "3" => [:attack, :move]}
 
-  4) Scribe assigns each object's batch to a worker for sequential processing:
+    4) Scribe assigns each object's batch to a worker for sequential processing:
 
-      Worker A (for O1): [:move, :attack]
-      Worker B (for O2): [:heal]
-      Worker C (for O3): [:attack, :move]
+            Worker A - {1, [:move, :attack]}
+            Worker B - {2, [:heal]}
+            Worker C - {3, [:attack, :move]}
 
   This architecture provides:
   - **Concurrency**: Events for different objects are processed in parallel across partitions
