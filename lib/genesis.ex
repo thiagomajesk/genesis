@@ -40,9 +40,12 @@ defmodule Genesis do
   receives a batch of Genesis Events for a single object, processes them sequentially, then notifies the
   Envoy when finished so more events can be dispatched for that object.
 
-  The topology looks like the following:
+  The topology looks like the following (with 2 partitions):
 
-        [World] --> [Herald] --> [Envoy] --> [Scribe] --> [Worker]
+                              ┌──> [Envoy P0] ---> [Scribe] -----> [Worker]
+        [World] ──> [Herald] ─┤
+                              └──> [Envoy P1] ---> [Scribe] ──┬──> [Worker]
+                                                              └──> [Worker]
 
   Here's how events flow through the system (using 2 partitions as an example):
 
