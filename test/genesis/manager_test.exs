@@ -4,6 +4,7 @@ defmodule Genesis.ManagerTest do
   alias Genesis.Manager
   alias Genesis.Prefab
   alias Genesis.Aspects.Health
+  alias Genesis.Aspects.Container
   alias Genesis.Aspects.Moniker
   alias Genesis.Aspects.Position
   alias Genesis.Aspects.Selectable
@@ -222,6 +223,25 @@ defmodule Genesis.ManagerTest do
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
              ] = Enum.sort(aspects)
+    end
+
+    test "create prefab with props as string keys" do
+      Manager.register_aspect(Container)
+
+      Manager.register_prefab(%{
+        name: "Crate",
+        aspects: %{
+          "container" => %{
+            "capacity" => 10,
+            "name" => "Crate"
+          }
+        }
+      })
+
+      assert [{"Crate", %Prefab{aspects: aspects}}] = Manager.list_prefabs()
+
+      assert [%Container{capacity: 10, name: "Crate"}] =
+               Enum.filter(aspects, &match?(%Container{}, &1))
     end
   end
 end

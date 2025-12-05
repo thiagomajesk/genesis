@@ -50,7 +50,7 @@ defmodule Genesis.Value do
 
   def cast(attrs, props) do
     attrs
-    |> Enum.into(%{})
+    |> normalize()
     |> merge_defaults(props)
     |> build_props(props)
   end
@@ -93,15 +93,25 @@ defmodule Genesis.Value do
     end)
   end
 
+  defp normalize(attrs) do
+    Enum.into(attrs, %{}, fn
+      {key, value} when is_atom(key) ->
+        {to_string(key), value}
+
+      {key, value} ->
+        {key, value}
+    end)
+  end
+
   defp merge_defaults(attrs, props) do
     Enum.reduce(props, attrs, fn {name, _type, opts}, acc ->
-      Map.put_new(acc, name, Keyword.get(opts, :default))
+      Map.put_new(acc, to_string(name), Keyword.get(opts, :default))
     end)
   end
 
   defp build_props(attrs, props) do
     Map.new(props, fn {name, type, opts} ->
-      value = Map.get(attrs, name)
+      value = Map.get(attrs, to_string(name))
 
       required? = Keyword.get(opts, :required, false)
 
