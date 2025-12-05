@@ -11,8 +11,7 @@ defmodule Genesis.Utils do
     module
     |> Module.split()
     |> List.last()
-    |> to_string()
-    |> String.downcase()
+    |> Macro.underscore()
   end
 
   def aspect?(module) when is_atom(module) do

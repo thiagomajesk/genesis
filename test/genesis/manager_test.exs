@@ -6,6 +6,7 @@ defmodule Genesis.ManagerTest do
   alias Genesis.Aspects.Health
   alias Genesis.Aspects.Container
   alias Genesis.Aspects.Moniker
+  alias Genesis.Aspects.MetaInfo
   alias Genesis.Aspects.Position
   alias Genesis.Aspects.Selectable
 
@@ -148,16 +149,20 @@ defmodule Genesis.ManagerTest do
 
   describe "prefabs" do
     test "create prefab with map and default alias" do
+      now = DateTime.utc_now()
+
       Manager.register_aspect(Health)
       Manager.register_aspect(Moniker)
       Manager.register_aspect(Position)
       Manager.register_aspect(Selectable)
+      Manager.register_aspect(MetaInfo)
 
       Manager.register_prefab(%{
         name: "Being",
         aspects: %{
           "health" => %{current: 100},
           "moniker" => %{name: "Being"},
+          "meta_info" => %{creation_date: now},
           "position" => %{x: 10, y: 20},
           "selectable" => %{}
         }
@@ -167,6 +172,7 @@ defmodule Genesis.ManagerTest do
 
       assert [
                %Selectable{},
+               %MetaInfo{creation_date: ^now},
                %Health{current: 100},
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
@@ -174,16 +180,20 @@ defmodule Genesis.ManagerTest do
     end
 
     test "create prefab with list and custom alias" do
+      now = DateTime.utc_now()
+
       Manager.register_aspect({"prefix::health", Health})
       Manager.register_aspect({"prefix::moniker", Moniker})
       Manager.register_aspect({"prefix::position", Position})
       Manager.register_aspect({"prefix::selectable", Selectable})
+      Manager.register_aspect({"prefix::meta_info", MetaInfo})
 
       Manager.register_prefab(%{
         name: "Being",
         aspects: [
           {"prefix::health", %{current: 100}},
           {"prefix::moniker", %{name: "Being"}},
+          {"prefix::meta_info", %{creation_date: now}},
           {"prefix::position", %{x: 10, y: 20}},
           {"prefix::selectable", %{}}
         ]
@@ -193,6 +203,7 @@ defmodule Genesis.ManagerTest do
 
       assert [
                %Selectable{},
+               %MetaInfo{creation_date: ^now},
                %Health{current: 100},
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
@@ -200,16 +211,20 @@ defmodule Genesis.ManagerTest do
     end
 
     test "create prefab with keyword list" do
+      now = DateTime.utc_now()
+
       Manager.register_aspect({:health, Health})
       Manager.register_aspect({:moniker, Moniker})
       Manager.register_aspect({:position, Position})
       Manager.register_aspect({:selectable, Selectable})
+      Manager.register_aspect({:meta_info, MetaInfo})
 
       Manager.register_prefab(%{
         name: "Being",
         aspects: [
           health: %{current: 100},
           moniker: %{name: "Being"},
+          meta_info: %{creation_date: now},
           position: %{x: 10, y: 20},
           selectable: %{}
         ]
@@ -219,10 +234,11 @@ defmodule Genesis.ManagerTest do
 
       assert [
                %Selectable{},
-               %Health{current: 100},
-               %Moniker{name: "Being"},
-               %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
+               %MetaInfo{creation_date: ^now},
+             %Health{current: 100},
+             %Moniker{name: "Being"},
+             %Position{y: 20, x: 10}
+            ] = Enum.sort(aspects)
     end
 
     test "create prefab with props as string keys" do

@@ -31,8 +31,13 @@ defmodule Genesis.Aspects.Container do
   prop :capacity, :integer, required: true
   prop :weight, :float, default: 0.0
   prop :owner, :binary, default: "Unassigned"
-  prop :creation_date, :datetime
   prop :is_locked, :boolean, default: false
   prop :durability, :integer, default: 100
   prop :material, :atom, default: :wood
+end
+
+defmodule Genesis.Aspects.MetaInfo do
+  use Genesis.Aspect
+
+  prop :creation_date, :datetime
 end
