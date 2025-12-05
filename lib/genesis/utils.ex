@@ -1,22 +1,54 @@
 defmodule Genesis.Utils do
   @moduledoc false
 
-  case Application.compile_env(:genesis, :object_ids, :integer) do
-    :reference -> def object_id(), do: make_ref()
-    :integer -> def object_id(), do: System.unique_integer([:positive, :monotonic])
-    other -> raise "Invalid option given to :object_ids: #{inspect(other)}"
+  defguard is_min_max(min, max) when is_integer(min) and is_integer(max) and min <= max
+
+  defguard is_non_empty_pairs(properties)
+           when (is_list(properties) and properties != []) or
+                  (is_non_struct_map(properties) and properties != %{})
+
+  def rekey(tuple) when is_tuple(tuple) do
+    {elem(tuple, 0), Tuple.delete_at(tuple, 0)}
   end
 
   def aliasify(module) when is_atom(module) do
     module
     |> Module.split()
     |> List.last()
-    |> to_string()
-    |> String.downcase()
+    |> Macro.underscore()
   end
 
-  def aspect?(module) when is_atom(module) do
+  def component?(module) when is_atom(module) do
     attributes = module.__info__(:attributes)
-    Genesis.Aspect in Access.get(attributes, :behaviour, [])
+    # NOTE: For some reason, we get two keys for :behaviour
+    behaviours = Keyword.get_values(attributes, :behaviour)
+    Genesis.Component in List.flatten(behaviours)
+  end
+
+  def merge_components(original, overrides) do
+    expanded = expand_components(overrides)
+    merged = Map.merge(original, expanded, fn _k, v1, v2 -> Map.merge(v1, v2) end)
+    Enum.map(merged, fn {component_type, properties} -> component_type.new(properties) end)
+  end
+
+  def extract_properties(components) do
+    Enum.reduce(components, %{}, fn component, acc ->
+      Map.put(acc, component.__struct__, Map.from_struct(component))
+    end)
+  end
+
+  def expand_components(component_lookup) do
+    Enum.reduce(component_lookup, %{}, fn {name, properties}, acc ->
+      case Genesis.Context.lookup(Genesis.Components, name) do
+        {_entity, _types, metadata} ->
+          component_type = Code.ensure_loaded!(metadata.type)
+          Map.put(acc, component_type, properties)
+
+        nil ->
+          raise ArgumentError,
+                "component #{inspect(name)} is not registered. " <>
+                  "Ensure it is registered with Genesis.Manager.register_components/1 first"
+      end
+    end)
   end
 end

@@ -50,7 +50,7 @@ defmodule Genesis.MixProject do
   def application do
     [
       mod: {Genesis, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :mnesia]
     ]
   end
 

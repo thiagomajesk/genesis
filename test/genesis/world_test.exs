@@ -3,126 +3,101 @@ defmodule Genesis.WorldTest do
 
   alias Genesis.World
   alias Genesis.Manager
-  alias Genesis.Aspects.Health
-  alias Genesis.Aspects.Moniker
-  alias Genesis.Aspects.Position
-  alias Genesis.Aspects.Selectable
+  alias Genesis.Components.Health
+  alias Genesis.Components.Moniker
+  alias Genesis.Components.Position
+  alias Genesis.Components.Selectable
 
   setup do
     on_exit(fn -> Manager.reset() end)
 
-    aspects = [Health, Moniker, Position, Selectable]
-    Enum.each(aspects, &Manager.register_aspect/1)
+    components = [Health, Moniker, Position, Selectable]
+    Manager.register_components(components)
 
-    world = start_link_supervised!(World)
-
-    {:ok, world: world, aspects: aspects}
-  end
-
-  describe "fetch/1" do
-    test "returns empty when no aspects were registered", %{world: world} do
-      object = World.create(world)
-
-      assert [] = World.fetch(object)
-    end
-
-    test "returns all aspects for a given object", %{world: world} do
-      object = World.create(world)
-
-      Health.attach(object, current: 100)
-      Position.attach(object, x: 10, y: 20)
-      Moniker.attach(object, name: "Object")
-
-      aspects = World.fetch(object)
-
-      assert [
-               %Health{current: 100},
-               %Moniker{name: "Object"},
-               %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
-    end
+    {:ok, world: start_link_supervised!(World)}
   end
 
   describe "fetch/2" do
-    test "returns nil for unkown objects", %{world: world} do
-      object = make_ref()
+    test "returns nil for unknown entities", %{world: world} do
+      context = World.context(world)
+      entity = Genesis.Entity.new(context: context)
 
-      assert World.fetch(world, object) == nil
+      assert World.fetch(world, entity) == nil
     end
 
-    test "returns all aspects for a given object", %{world: world} do
-      object = World.create(world)
+    test "returns all components for a given entity", %{world: world} do
+      entity = World.create(world)
 
-      Health.attach(object, current: 100)
-      Position.attach(object, x: 10, y: 20)
-      Moniker.attach(object, name: "Object")
+      Health.attach(entity, current: 100)
+      Position.attach(entity, x: 10, y: 20)
+      Moniker.attach(entity, name: "Object")
 
-      aspects = World.fetch(world, object)
+      components = World.fetch(world, entity)
 
       assert [
                %Health{current: 100},
                %Moniker{name: "Object"},
                %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
+             ] = Enum.sort(components)
     end
   end
 
-  describe "list_objects" do
-    test "with aspects as list", %{world: world} do
-      object = World.create(world)
+  describe "list" do
+    test "with components as list", %{world: world} do
+      entity = World.create(world)
 
-      Health.attach(object, current: 100)
-      Position.attach(object, x: 10, y: 20)
-      Moniker.attach(object, name: "Object")
+      Health.attach(entity, current: 100)
+      Position.attach(entity, x: 10, y: 20)
+      Moniker.attach(entity, name: "Object")
 
-      stream = World.list_objects(aspects_as: :list)
+      stream = World.list(world, format_as: :list)
 
-      assert [{^object, aspects}] = Enum.to_list(stream)
+      assert [{^entity, components}] = Enum.to_list(stream)
 
       assert [
                %Health{current: 100},
                %Moniker{name: "Object"},
                %Position{x: 10, y: 20}
-             ] = Enum.sort(aspects)
+             ] = Enum.sort(components)
     end
 
-    test "with aspects as map", %{world: world} do
-      object = World.create(world)
+    test "with components as map", %{world: world} do
+      entity = World.create(world)
 
-      Health.attach(object, current: 100)
-      Position.attach(object, x: 10, y: 20)
-      Moniker.attach(object, name: "Object")
+      Health.attach(entity, current: 100)
+      Position.attach(entity, x: 10, y: 20)
+      Moniker.attach(entity, name: "Object")
 
-      stream = World.list_objects(aspects_as: :map)
+      stream = World.list(world, format_as: :map)
 
-      assert [{^object, aspects}] = Enum.to_list(stream)
+      assert [{^entity, components}] = Enum.to_list(stream)
 
-      assert %{y: 20, x: 10} = aspects["position"]
-      assert %{maximum: nil, current: 100} = aspects["health"]
-      assert %{name: "Object", description: nil} = aspects["moniker"]
+      assert %{y: 20, x: 10} = components["position"]
+      assert %{maximum: nil, current: 100} = components["health"]
+      assert %{name: "Object", description: nil} = components["moniker"]
     end
   end
 
   test "create/1", %{world: world} do
-    object = World.create(world)
+    entity = World.create(world)
 
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
+    Health.attach(entity, current: 100)
+    Position.attach(entity, x: 10, y: 20)
+    Moniker.attach(entity, name: "Object")
 
-    aspects = World.fetch(world, object)
+    components = World.fetch(world, entity)
 
     assert [
              %Health{current: 100},
              %Moniker{name: "Object"},
              %Position{x: 10, y: 20}
-           ] = Enum.sort(aspects)
+           ] = Enum.sort(components)
   end
 
   test "create/2", %{world: world} do
     Manager.register_prefab(%{
       name: "Being",
-      aspects: %{
+      components: %{
         "health" => %{current: 100, maximum: 100},
         "moniker" => %{name: "Being"},
         "position" => %{x: 10, y: 20},
@@ -132,62 +107,170 @@ defmodule Genesis.WorldTest do
 
     Manager.register_prefab(%{
       name: "Human",
-      inherits: ["Being"],
-      aspects: %{
+      extends: ["Being"],
+      components: %{
         "health" => %{current: 50},
         "moniker" => %{name: "John Doe"},
         "position" => %{x: 100, y: 200}
       }
     })
 
-    object = World.create(world, "Human")
+    entity = World.create(world, "Human")
 
-    aspects = World.fetch(object)
+    components = World.fetch(world, entity)
 
     assert [
              %Selectable{},
              %Health{current: 50, maximum: 100},
              %Moniker{name: "John Doe"},
              %Position{x: 100, y: 200}
-           ] = Enum.sort(aspects)
+           ] = Enum.sort(components)
+  end
+
+  test "create/3", %{world: world} do
+    Manager.register_prefab(%{
+      name: "Item",
+      components: %{
+        "moniker" => %{name: "Potion"}
+      }
+    })
+
+    overrides = %{"moniker" => %{name: "Healing Potion"}}
+    entity = World.create(world, "Item", overrides)
+
+    assert %Moniker{name: "Healing Potion"} = Moniker.get(entity)
   end
 
   test "clone/1", %{world: world} do
-    object = World.create(world)
+    entity = World.create(world)
 
-    Health.attach(object, current: 100)
-    Position.attach(object, x: 10, y: 20)
-    Moniker.attach(object, name: "Object")
+    Health.attach(entity, current: 100)
+    Position.attach(entity, x: 10, y: 20)
+    Moniker.attach(entity, name: "Object")
 
-    clone = World.clone(world, object)
+    clone = World.clone(world, entity)
 
-    assert clone != object
-    assert Health.get(clone) == Health.get(object)
-    assert Position.get(clone) == Position.get(object)
-    assert Moniker.get(clone) == Moniker.get(object)
-    assert World.fetch(clone) == World.fetch(object)
+    assert clone != entity
+    assert Health.get(clone) == Health.get(entity)
+    assert Position.get(clone) == Position.get(entity)
+    assert Moniker.get(clone) == Moniker.get(entity)
   end
 
   describe "destroy/1" do
-    test "removes object and its aspects", %{world: world} do
-      object = World.create(world)
+    test "removes entity components", %{world: world} do
+      entity = World.create(world)
 
-      Health.attach(object, current: 100)
-      Position.attach(object, x: 10, y: 20)
-      Moniker.attach(object, name: "Object")
+      Health.attach(entity, current: 100)
+      Position.attach(entity, x: 10, y: 20)
+      Moniker.attach(entity, name: "Object")
 
-      assert :ok = World.destroy(world, object)
+      assert :ok = World.destroy(world, entity)
 
-      refute Health.get(object)
-      refute Position.get(object)
-      refute Moniker.get(object)
+      refute Health.get(entity)
+      refute Position.get(entity)
+      refute Moniker.get(entity)
 
-      assert [] = World.fetch(object)
+      assert nil == World.fetch(world, entity)
     end
 
-    test "returns noop for unkown objects", %{world: world} do
-      object = make_ref()
-      assert :noop = World.destroy(world, object)
+    test "returns noop for unknown entities", %{world: world} do
+      context = World.context(world)
+      entity = Genesis.Entity.new(context: context)
+      assert :noop = World.destroy(world, entity)
+    end
+  end
+
+  describe "attach/3" do
+    test "attaches a component to an entity", %{world: world} do
+      entity = World.create(world)
+
+      assert :ok = Health.attach(entity, current: 100)
+      assert %Health{current: 100} = Health.get(entity)
+    end
+
+    test "returns error when component already attached", %{world: world} do
+      entity = World.create(world)
+
+      Health.attach(entity, current: 50)
+      assert :error = Health.attach(entity, current: 100)
+      assert %Health{current: 50} = Health.get(entity)
+    end
+  end
+
+  describe "update/3" do
+    test "updates a component on an entity", %{world: world} do
+      entity = World.create(world)
+
+      Health.attach(entity, current: 100)
+      assert :ok = Health.update(entity, current: 50)
+      assert %Health{current: 50} = Health.get(entity)
+    end
+
+    test "returns error when component not present", %{world: world} do
+      entity = World.create(world)
+
+      assert :noop = Health.update(entity, current: 50)
+    end
+  end
+
+  describe "queries" do
+    test "all/2", %{world: world} do
+      entity_1 = World.create(world)
+      entity_2 = World.create(world)
+      entity_3 = World.create(world)
+
+      Health.attach(entity_1, current: 100)
+      Health.attach(entity_2, current: 100)
+      Health.attach(entity_3, current: 100)
+
+      entities = Enum.map(World.all(world, Health), &elem(&1, 0))
+
+      assert Enum.member?(entities, entity_1)
+      assert Enum.member?(entities, entity_2)
+      assert Enum.member?(entities, entity_3)
+    end
+
+    test "at_least/4", %{world: world} do
+      entity_1 = World.create(world)
+      entity_2 = World.create(world)
+
+      Health.attach(entity_1, current: 10)
+      Health.attach(entity_2, current: 50)
+
+      assert [{^entity_2, _}] = World.at_least(world, Health, :current, 50)
+    end
+
+    test "at_most/4", %{world: world} do
+      entity_1 = World.create(world)
+      entity_2 = World.create(world)
+
+      Health.attach(entity_1, current: 10)
+      Health.attach(entity_2, current: 50)
+
+      assert [{^entity_1, _}] = World.at_most(world, Health, :current, 10)
+    end
+
+    test "between/5", %{world: world} do
+      entity_1 = World.create(world)
+      entity_2 = World.create(world)
+
+      Health.attach(entity_1, current: 10)
+      Health.attach(entity_2, current: 50)
+
+      assert [{^entity_1, _}] = World.between(world, Health, :current, 5, 15)
+      assert [{^entity_2, _}] = World.between(world, Health, :current, 40, 60)
+    end
+
+    test "match/3", %{world: world} do
+      entity_1 = World.create(world)
+      entity_2 = World.create(world)
+
+      Health.attach(entity_1, current: 100, maximum: 100)
+      Health.attach(entity_2, current: 0, maximum: 100)
+
+      assert [{^entity_1, _}] = World.match(world, Health, current: 100)
+      assert [{^entity_2, _}] = World.match(world, Health, current: 0, maximum: 100)
+      assert [] = World.match(world, Health, invalid: 100)
     end
   end
 end

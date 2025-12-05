@@ -1,10 +1,11 @@
 defmodule Genesis.World do
   @moduledoc """
-  World is a GenServer that manages the lifecycle of objects in the game.
-  It is responsible for creating, cloning, and destroying objects. It also manages the event
-  routing logic for object's aspects, ensuring that events are dispatched and handled correctly.
+  World is a GenServer that manages the lifecycle of entities at runtime.
+  A world is responsible for creating, cloning, and destroying entities from its own context.
+  It also manages the event routing logic for the components an entity has, ensuring that events are dispatched and handled correctly.
   """
   use GenServer
+  require Logger
 
   @doc """
   Starts the World process.
@@ -14,104 +15,148 @@ defmodule Genesis.World do
   end
 
   @doc """
-  Sends a message to an object.
-
-  The event will be dispatched to all aspects currently attached to the object that
-  should handle the event which will be processed in order of registration.
+  Sends an event to an entity.
   """
-  def send(world, object, event, args \\ %{})
+  def send(world, entity, event, args \\ %{})
 
-  def send(world, object, event, args) when is_atom(event) do
-    GenServer.call(world, {:send, object, {event, args}})
+  def send(world, %Genesis.Entity{} = entity, event, args) when is_atom(event) do
+    GenServer.call(world, {:send, entity, {event, args}})
   end
 
   @doc """
-  Creates a new object in the world.
+  Returns the underlying world context.
+
+  Since both writes and reads in a world are always synchronous, this function
+  creates an escape hatch so users can execute operations using the underlying context.
+  All read operations executed directly in the context should be considered dirty by default.
+
+  ## Example
+
+      context = World.context(world)
+      Genesis.Context.search(context, ...)
+  """
+  def context(world) do
+    GenServer.call(world, :context)
+  end
+
+  @doc """
+  Executes a function with the world context synchronously.
+
+  Differently from `World.context/1`, this allows for safe context operations
+  since it's executed synchronously within the world server itself. The function
+  must return a value that will be replied back to the caller.
+
+  ## Example
+
+      World.context(world, fn ctx ->
+        Genesis.Context.emplace(ctx, entity, component)
+      end)
+  """
+  def context(world, fun) when is_function(fun, 1) do
+    GenServer.call(world, {:context, fun})
+  end
+
+  @doc """
+  Creates a new entity in the world.
   """
   def create(world) do
     GenServer.call(world, :create)
   end
 
   @doc """
-  Creates a new object from a prefab.
+  Creates a new entity from a prefab.
   The prefab must be registered before it can be used.
+  Optionally, you can provide overrides to modify component properties.
   """
-  def create(world, name) do
-    GenServer.call(world, {:create, name})
+  def create(world, name, overrides \\ %{}) do
+    GenServer.call(world, {:create, name, overrides})
   end
 
   @doc """
-  Fetches the aspects of an object.
+  Same as `Genesis.World.fetch/2` but scoped to the world.
   """
-  def fetch(object) do
-    table = Genesis.Manager.table(:objects)
-    :ets.select(table, [{{object, :"$1"}, [], [:"$1"]}])
+  def fetch(world, entity) do
+    GenServer.call(world, {:fetch, entity})
   end
 
   @doc """
-  Fetches the aspects of an object in the world.
+  Same as `Genesis.Context.all/2` but scoped to the world.
   """
-  def fetch(world, object) do
-    GenServer.call(world, {:fetch, object})
+  def all(world, component_type) do
+    GenServer.call(world, {:all, component_type})
   end
 
   @doc """
-  Clones an object with all its aspects.
-  The clone object will be created in the current world.
+  Same as `Genesis.Context.match/3` but scoped to the world.
   """
-  def clone(world, object) do
-    GenServer.call(world, {:clone, object})
+  def match(world, component_type, properties) do
+    GenServer.call(world, {:match, component_type, properties})
   end
 
   @doc """
-  Destroys an object from the world.
-  Returns `:ok` if the object was successfully destroyed, or `:noop` if the object doesn't exist.
+  Same as `Genesis.Context.at_least/4` but scoped to the world.
   """
-  def destroy(world, object) do
-    GenServer.call(world, {:destroy, object})
+  def at_least(world, component_type, property, value) do
+    GenServer.call(world, {:at_least, component_type, property, value})
   end
 
   @doc """
-  List all objects with their respective aspects.
+  Same as `Genesis.Context.at_most/4` but scoped to the world.
+  """
+  def at_most(world, component_type, property, value) do
+    GenServer.call(world, {:at_most, component_type, property, value})
+  end
+
+  @doc """
+  Same as `Genesis.Context.between/5` but scoped to the world.
+  """
+  def between(world, component_type, property, min, max) do
+    GenServer.call(world, {:between, component_type, property, min, max})
+  end
+
+  @doc """
+  Same as `Genesis.Context.exists?/2` but scoped to the world.
+  """
+  def exists?(world, entity) do
+    GenServer.call(world, {:exists?, entity})
+  end
+
+  @doc """
+  Clones an entity with all its components.
+  See `Genesis.Manager.clone!/2` for more details.
+  """
+  def clone(world, entity) do
+    GenServer.call(world, {:clone, entity})
+  end
+
+  @doc """
+  Destroys an entity from the world.
+  Returns `:ok` if the entity was successfully destroyed, or `:noop` if the entity doesn't exist.
+  See `Genesis.Context.destroy/2` for more details.
+  """
+  def destroy(world, entity) do
+    GenServer.call(world, {:destroy, entity})
+  end
+
+  @doc """
+  List all entities in the world with their respective components.
 
   ## Options
 
-    * `:aspects_as` - Specifies how to represent the aspects of each object.
-      Can be `:list` (default) to return a list of aspect structs, or `:map` to return
-      a map where keys are aspect aliases and values are aspect structs.
+    * `:format_as` - Specifies how to represent the components of each entity.
+      Can be `:list` (default) to return a list of component structs, or `:map` to return
+      a map where keys are component aliases and values are component structs.
 
   ## Examples
 
-      iex> Genesis.World.list_objects(aspects_as: :list)
-      [{1, [%Health{current: 100}]}]
+      iex> Genesis.World.list(world, format_as: :list)
+      [{entity, [%Health{current: 100}]}]
 
-      iex> Genesis.World.list_objects(aspects_as: :map)
-      [{1, %{"health" => %Health{current: 100}}}]
+      iex> Genesis.World.list(world, format_as: :map)
+      [{entity, %{"health" => %Health{current: 100}}}]
   """
-  def list_objects(opts \\ []) do
-    table = Genesis.Manager.table(:objects)
-
-    case Keyword.get(opts, :aspects_as, :list) do
-      :list ->
-        Genesis.ETS.group_keys(table)
-
-      :map ->
-        stream = Genesis.ETS.group_keys(table)
-
-        aspects_lookup =
-          Map.new(
-            Genesis.Manager.list_aspects(),
-            fn {as, module} -> {module, as} end
-          )
-
-        Stream.map(stream, fn {object, aspects} ->
-          {object,
-           Map.new(aspects, fn aspect ->
-             {module, map} = Map.pop!(aspect, :__struct__)
-             {Map.fetch!(aspects_lookup, module), map}
-           end)}
-        end)
-    end
+  def list(world, opts \\ []) do
+    GenServer.call(world, {:list, opts})
   end
 
   @impl true
@@ -119,6 +164,7 @@ defmodule Genesis.World do
     max_events = Access.get(opts, :max_events, 1000)
     partitions = Access.get(opts, :partitions, System.schedulers_online())
 
+    {:ok, context} = Genesis.Context.start_link()
     {:ok, supervisor} = Supervisor.start_link([], strategy: :one_for_one)
 
     {:ok, herald} = Supervisor.start_child(supervisor, {Genesis.Herald, partitions: partitions})
@@ -139,27 +185,35 @@ defmodule Genesis.World do
       GenStage.async_subscribe(scribe, to: envoy, max_demand: max_events)
     end)
 
-    {:ok, %{herald: herald, objects: MapSet.new()}}
+    {:ok, %{herald: herald, context: context}}
   end
 
   @impl true
-  def handle_call({:send, object, {event, args}}, {pid, _tag}, state) do
-    case lookup_handlers(object, event) do
+  def handle_call(:context, _from, state) do
+    {:reply, state.context, state}
+  end
+
+  @impl true
+  def handle_call({:context, fun}, _from, state) do
+    {:reply, fun.(state.context), state}
+  end
+
+  @impl true
+  def handle_call({:send, entity, {event, args}}, {pid, _tag}, state) do
+    case lookup_handlers(entity, state, event) do
       [] ->
         {:reply, :noop, state}
 
-      modules ->
-        event = %Genesis.Event{
+      handlers ->
+        Genesis.Herald.notify(state.herald, %Genesis.Event{
           name: event,
           from: pid,
           args: args,
           world: self(),
-          object: object,
-          handlers: Enum.reverse(modules),
+          entity: entity,
+          handlers: handlers,
           timestamp: :erlang.system_time()
-        }
-
-        Genesis.Herald.notify(state.herald, event)
+        })
 
         {:reply, :ok, state}
     end
@@ -167,86 +221,136 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call(:create, _from, state) do
-    object = Genesis.Utils.object_id()
-    objects = MapSet.put(state.objects, object)
-    {:reply, object, %{state | objects: objects}}
+    opts = [context: state.context, world: self()]
+    {:reply, Genesis.Context.create(state.context, opts), state}
   end
 
   @impl true
-  def handle_call({:create, name}, _from, state) do
-    table = Genesis.Manager.table(:prefabs)
-
-    case Genesis.ETS.get(table, name, nil) do
+  def handle_call({:create, name, overrides}, _from, state) do
+    case Genesis.Context.lookup(Genesis.Prefabs, name) do
       nil ->
         {:reply, :noop, state}
 
-      %{aspects: aspects} ->
-        object = Genesis.Utils.object_id()
+      {prefab, _types, metadata} ->
+        options = [
+          source: Genesis.Prefabs,
+          target: state.context,
+          metadata: metadata,
+          overrides: overrides
+        ]
 
-        Enum.each(aspects, fn aspect ->
-          Genesis.Manager.attach_aspect(object, aspect)
-        end)
+        case Genesis.Manager.clone!(prefab, options) do
+          {:ok, clone} ->
+            {:reply, clone, state}
 
-        objects = MapSet.put(state.objects, object)
-        {:reply, object, %{state | objects: objects}}
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
     end
   end
 
   @impl true
-  def handle_call({:fetch, object}, _from, state) do
-    if MapSet.member?(state.objects, object),
-      do: {:reply, fetch(object), state},
-      else: {:reply, nil, state}
+  def handle_call({:fetch, entity}, _from, state) do
+    case Genesis.Context.fetch(state.context, entity) do
+      nil ->
+        {:reply, nil, state}
+
+      {_entity, components} ->
+        {:reply, components, state}
+    end
   end
 
   @impl true
-  def handle_call({:clone, object}, _from, state) do
-    aspects = fetch(object)
-
-    clone = Genesis.Utils.object_id()
-
-    Enum.each(aspects, fn aspect ->
-      Genesis.Manager.attach_aspect(clone, aspect)
-    end)
-
-    objects = MapSet.put(state.objects, clone)
-    {:reply, clone, %{state | objects: objects}}
+  def handle_call({:all, component_type}, _from, state) do
+    {:reply, Genesis.Context.all(state.context, component_type), state}
   end
 
   @impl true
-  def handle_call({:destroy, object}, _from, state) do
-    can_destroy? = MapSet.member?(state.objects, object)
+  def handle_call({:match, component_type, properties}, _from, state) do
+    {:reply, Genesis.Context.match(state.context, component_type, properties), state}
+  end
 
-    case {can_destroy?, fetch(object)} do
-      {false, _aspects} ->
+  @impl true
+  def handle_call({:at_least, component_type, property, value}, _from, state) do
+    {:reply, Genesis.Context.at_least(state.context, component_type, property, value), state}
+  end
+
+  @impl true
+  def handle_call({:at_most, component_type, property, value}, _from, state) do
+    {:reply, Genesis.Context.at_most(state.context, component_type, property, value), state}
+  end
+
+  @impl true
+  def handle_call({:between, component_type, property, min, max}, _from, state) do
+    {:reply, Genesis.Context.between(state.context, component_type, property, min, max), state}
+  end
+
+  @impl true
+  def handle_call({:exists?, entity}, _from, state) do
+    {:reply, Genesis.Context.exists?(state.context, entity), state}
+  end
+
+  @impl true
+  def handle_call({:clone, entity}, _from, state) do
+    options = [source: state.context, target: state.context]
+
+    case Genesis.Manager.clone!(entity, options) do
+      {:ok, clone} ->
+        {:reply, clone, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:destroy, entity}, _from, state) do
+    case Genesis.Context.destroy(state.context, entity) do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, _reason} ->
         {:reply, :noop, state}
-
-      {true, aspects} ->
-        Enum.each(aspects, fn %{__struct__: module} ->
-          Genesis.Manager.remove_aspect(object, module)
-        end)
-
-        objects = MapSet.delete(state.objects, object)
-        {:reply, :ok, %{state | objects: objects}}
     end
   end
 
-  defp lookup_handlers(object, event) do
-    aspects = fetch(object)
-    modules = MapSet.new(aspects, & &1.__struct__)
+  @impl true
+  def handle_call({:list, opts}, _from, state) do
+    stream = Genesis.Context.entities(state.context)
 
-    table = Genesis.Manager.table(:events)
+    result =
+      case Keyword.get(opts, :format_as, :list) do
+        :list ->
+          Stream.map(stream, fn {entity, {_, _, components}} ->
+            {entity, components}
+          end)
 
-    case Genesis.ETS.get(table, event, nil) do
+        :map ->
+          Stream.map(stream, fn {entity, {_, _, components}} ->
+            aliased_components =
+              Map.new(components, fn component ->
+                {component_type, properties} = Map.pop(component, :__struct__)
+                {component_type.__component__(:name), properties}
+              end)
+
+            {entity, aliased_components}
+          end)
+      end
+
+    {:reply, result, state}
+  end
+
+  defp lookup_handlers(entity, state, event) do
+    case Genesis.Context.fetch(state.context, entity) do
       nil ->
         []
 
-      handlers ->
-        Enum.reduce(handlers, [], fn {_as, module}, acc ->
-          if MapSet.member?(modules, module),
-            do: [module | acc],
-            else: acc
-        end)
+      {^entity, components} ->
+        component_types = MapSet.new(components, & &1.__struct__)
+
+        event
+        |> Genesis.Manager.handlers()
+        |> Enum.filter(&MapSet.member?(component_types, &1))
     end
   end
 end

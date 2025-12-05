@@ -5,93 +5,91 @@ defmodule Genesis.GenesisTest do
   alias Genesis.Manager
 
   defmodule Ping do
-    use Genesis.Aspect, events: [:ping, :check]
+    use Genesis.Component, events: [:ping, :check]
 
-    def handle_event(event) do
+    def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
-      send(event.from, {__MODULE__, event.object, DateTime.utc_now()})
+      send(event.from, {__MODULE__, event.entity, DateTime.utc_now()})
       {:cont, event}
     end
   end
 
   defmodule Pong do
-    use Genesis.Aspect, events: [:pong, :check]
+    use Genesis.Component, events: [:pong, :check]
 
-    def handle_event(event) do
+    def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
-      send(event.from, {__MODULE__, event.object, DateTime.utc_now()})
+      send(event.from, {__MODULE__, event.entity, DateTime.utc_now()})
       {:cont, event}
     end
   end
 
   setup_all do
     on_exit(fn -> Manager.reset() end)
+    Manager.register_components([Ping, Pong])
 
-    world = start_link_supervised!(World)
-    aspects = Enum.map([Ping, Pong], &Manager.register_aspect/1)
-
-    {:ok, %{world: world, aspects: aspects}}
+    {:ok, %{world: start_link_supervised!(World)}}
   end
 
   test "events are handled in registration order", %{world: world} do
-    object = World.create(world)
+    entity = World.create(world)
 
     # Attach in reverse to prove the order of registration is the
-    # one that really matters when dispatching events to objects
-    Pong.attach(object)
-    Ping.attach(object)
+    # one that really matters when dispatching events to entities
+    Pong.attach(entity)
+    Ping.attach(entity)
 
-    # Aspects handling the same event will process the event
-    # repsecting the registration order (i.e: Ping -> Pong)
-    World.send(world, object, :check)
+    # Components handling the same event will process the event
+    # respecting the registration order (i.e: Ping -> Pong)
+    World.send(world, entity, :check)
 
-    assert_receive {Ping, ^object, ping_time}
-    assert_receive {Pong, ^object, pong_time}
+    assert_receive {Ping, ^entity, ping_time}
+    assert_receive {Pong, ^entity, pong_time}
 
     # Ensure that Ping was processed before Pong
     assert DateTime.before?(ping_time, pong_time),
            "Expected Ping to be processed before Pong (respecting registration order)"
   end
 
-  test "events dispatched to the same object are handled sequentially", %{world: world} do
-    object = World.create(world)
+  test "events dispatched to the same entity are handled sequentially", %{world: world} do
+    entity = World.create(world)
 
-    Ping.attach(object)
-    Pong.attach(object)
+    Ping.attach(entity)
+    Pong.attach(entity)
 
-    # Simulate latency for Ping to prove that aspects will
-    # always be processed sequentially for the same object
-    World.send(world, object, :ping, %{delay: 50})
-    World.send(world, object, :pong)
+    # Simulate latency for Ping to prove that components will
+    # always be processed sequentially for the same entity
+    World.send(world, entity, :ping, %{delay: 50})
+    World.send(world, entity, :pong)
 
-    assert_receive {Ping, ^object, ping_time}
-    assert_receive {Pong, ^object, pong_time}
+    assert_receive {Ping, ^entity, ping_time}
+    assert_receive {Pong, ^entity, pong_time}
 
     # Ensure that Ping was processed before Pong (Ping -> Pong)
     assert DateTime.before?(ping_time, pong_time),
-           "Expected Ping to be processed before Pong (objects aspects are sequential): #{inspect(ping_time)} | #{inspect(pong_time)}"
+           "Expected Ping to be processed before Pong (entity components are sequential): #{inspect(ping_time)} | #{inspect(pong_time)}"
   end
 
-  test "events dispatched to different objects are handled concurrently", %{world: world} do
-    object1 = World.create(world)
-    object2 = World.create(world)
+  test "events dispatched to different entities are handled concurrently", %{world: world} do
+    entity_1 = World.create(world)
+    entity_2 = World.create(world)
 
-    Ping.attach(object1)
-    Pong.attach(object1)
+    Ping.attach(entity_1)
+    Pong.attach(entity_1)
 
-    Ping.attach(object2)
-    Pong.attach(object2)
+    Ping.attach(entity_2)
+    Pong.attach(entity_2)
 
-    # Simulate latency to prove that aspects for different objects
+    # Simulate latency to prove that components for different entities
     # are always processed concurrently and not waiting on each other
-    World.send(world, object1, :check, %{delay: :infinity})
-    World.send(world, object2, :check)
+    World.send(world, entity_1, :check, %{delay: :infinity})
+    World.send(world, entity_2, :check)
 
     # Sanity check, to ensure that events are really blocked
-    refute_receive {Ping, ^object1, _object1_ping_time}
-    refute_receive {Pong, ^object1, _object1_pong_time}
+    refute_receive {Ping, ^entity_1, _entity_1_ping_time}
+    refute_receive {Pong, ^entity_1, _entity_1_pong_time}
 
-    assert_receive {Ping, ^object2, _object2_ping_time}
-    assert_receive {Pong, ^object2, _object2_pong_time}
+    assert_receive {Ping, ^entity_2, _entity_2_ping_time}
+    assert_receive {Pong, ^entity_2, _entity_2_pong_time}
   end
 end

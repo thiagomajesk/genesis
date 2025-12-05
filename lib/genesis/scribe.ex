@@ -25,11 +25,11 @@ defmodule Genesis.Scribe do
   end
 
   # What we receive here is not the individual event, but a batch of events for a particular
-  # object that we need to process sequentially. This ensures that we can have separate "lanes"
-  # for different objects that should be processed concurrently. When a worker finishes processing,
-  # it notifies the Envoy that this object's "lane" is free so it sends more events to be processed.
-  def start_worker(parent, {object, events}) do
-    Logger.debug("Starting worker for object #{inspect(object)} with #{length(events)} events")
+  # entity that we need to process sequentially. This ensures that we can have separate "lanes"
+  # for different entities that should be processed concurrently. When a worker finishes processing,
+  # it notifies the Envoy that this entity's "lane" is free so it sends more events to be processed.
+  def start_worker(parent, {entity, events}) do
+    Logger.debug("Starting worker for entity #{inspect(entity)} with #{length(events)} events")
 
     # NOTE: Tasks needs to be linked otherwise ConsumerSupervisor
     # won't be able to monitor them exiting and request more demand.
@@ -37,7 +37,7 @@ defmodule Genesis.Scribe do
       try do
         Enum.each(events, &Genesis.Event.process/1)
       after
-        send(parent, {:ack, object})
+        send(parent, {:ack, entity})
       end
     end)
   end

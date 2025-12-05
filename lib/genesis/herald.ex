@@ -1,4 +1,5 @@
 defmodule Genesis.Herald do
+  @moduledoc false
   use GenStage
 
   def start_link(opts) do
@@ -13,15 +14,7 @@ defmodule Genesis.Herald do
   def init(opts) do
     partitions = Access.fetch!(opts, :partitions)
 
-    # Use same hashing strategy as PartitionSupervisor, so the same object is always
-    # processed by the same partition (Scribe). The only difference from the default
-    # `GenStage.PartitionDispatcher` implementation is that in our case the object is
-    # the significant part of the event, so that's what we care about when hashing.
-    hash = fn event ->
-      if is_integer(event.object),
-        do: {event, rem(abs(event.object), partitions)},
-        else: {event, :erlang.phash2(event.object, partitions)}
-    end
+    hash = &{&1, :erlang.phash2(&1.entity.hash, partitions)}
 
     {:producer, {:queue.new(), 0},
      dispatcher: {GenStage.PartitionDispatcher, partitions: partitions, hash: hash}}
