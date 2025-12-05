@@ -57,7 +57,7 @@ defmodule Genesis.MixProject do
   defp deps do
     [
       {:gen_stage, "~> 1.3"},
-      {:ex_doc, "~> 0.37", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.39", only: :dev, runtime: false}
     ]
   end
 end
