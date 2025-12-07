@@ -235,10 +235,10 @@ defmodule Genesis.ManagerTest do
       assert [
                %Selectable{},
                %MetaInfo{creation_date: ^now},
-             %Health{current: 100},
-             %Moniker{name: "Being"},
-             %Position{y: 20, x: 10}
-            ] = Enum.sort(aspects)
+               %Health{current: 100},
+               %Moniker{name: "Being"},
+               %Position{y: 20, x: 10}
+             ] = Enum.sort(aspects)
     end
 
     test "create prefab with props as string keys" do
