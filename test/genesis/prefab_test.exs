@@ -30,7 +30,7 @@ defmodule Genesis.PrefabTest do
         registered_prefabs: registered_prefabs
       )
 
-    assert %Prefab{name: "Human", inherit: ["Being"], aspects: aspects} = prefab
+    assert %Prefab{name: "Human", extends: ["Being"], aspects: aspects} = prefab
 
     assert [
              %Health{current: 80, maximum: 100},
@@ -53,7 +53,7 @@ defmodule Genesis.PrefabTest do
   defp prefab_fixture(:human) do
     %{
       name: "Human",
-      inherits: ["Being"],
+      extends: ["Being"],
       aspects: %{
         "health" => %{current: 80},
         "moniker" => %{name: "Human"}

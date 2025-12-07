@@ -74,17 +74,17 @@ defmodule Genesis.Manager do
       ...>   }
       ...> })
 
-  Prefabs can also inherit from other prefabs to create complex object hierarchies.
+  Prefabs can also extend other prefabs to create complex object hierarchies.
 
       iex> Genesis.Manager.register_prefab(%{
       ...>   name: "Human",
-      ...>   inherits: "Being",
+      ...>   extends: "Being",
       ...>   aspects: %{
       ...>     "moniker" => %{name: "Human"}
       ...>   }
       ...> })
 
-  When a prefab inherits another, it will include all aspects of the parent prefab, allowing for reusable definitions.
+  When a prefab extends another, it will include all aspects of the parent prefab, allowing for reusable definitions.
   When loading prefabs, the aspects defined by a child prefab have precedence over those defined in the parent.
   """
   def register_prefab(attrs) when is_map(attrs) do

@@ -1,7 +1,7 @@
 defmodule Genesis.Prefab do
   @moduledoc false
 
-  defstruct [:name, :inherit, :aspects]
+  defstruct [:name, :extends, :aspects]
 
   alias __MODULE__
 
@@ -14,7 +14,7 @@ defmodule Genesis.Prefab do
 
     name = Map.fetch!(attrs, :name)
     aspects = Map.fetch!(attrs, :aspects)
-    inherits = Map.get(attrs, :inherits, [])
+    extends = Map.get(attrs, :extends, [])
 
     declared =
       Enum.map(aspects, fn {as, props} ->
@@ -24,7 +24,7 @@ defmodule Genesis.Prefab do
       end)
 
     inherited =
-      Enum.flat_map(inherits, fn name ->
+      Enum.flat_map(extends, fn name ->
         %{aspects: aspects} = Map.fetch!(prefabs_lookup, name)
         Enum.map(aspects, &{&1.__struct__, {:inherit, Map.from_struct(&1)}})
       end)
@@ -32,7 +32,7 @@ defmodule Genesis.Prefab do
     merged_aspects = merge_aspects(inherited, declared)
     final_aspects = Enum.map(merged_aspects, fn {module, props} -> module.new(props) end)
 
-    %Prefab{name: name, inherit: inherits, aspects: final_aspects}
+    %Prefab{name: name, extends: extends, aspects: final_aspects}
   end
 
   defp merge_aspects(inherited, declared) do

@@ -168,7 +168,7 @@ defmodule Genesis.ManagerTest do
         }
       })
 
-      assert [{"Being", %Prefab{inherit: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
 
       assert [
                %Selectable{},
@@ -199,7 +199,7 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{inherit: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
 
       assert [
                %Selectable{},
@@ -230,7 +230,7 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{inherit: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
 
       assert [
                %Selectable{},

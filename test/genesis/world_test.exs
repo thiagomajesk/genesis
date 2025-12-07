@@ -132,7 +132,7 @@ defmodule Genesis.WorldTest do
 
     Manager.register_prefab(%{
       name: "Human",
-      inherits: ["Being"],
+      extends: ["Being"],
       aspects: %{
         "health" => %{current: 50},
         "moniker" => %{name: "John Doe"},
