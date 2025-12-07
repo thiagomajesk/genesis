@@ -183,30 +183,30 @@ defmodule Genesis.Aspect do
       def update(object, property, fun) when is_atom(property) and is_function(fun, 1),
         do: Manager.update_aspect(object, __MODULE__, property, fun)
 
-      def all(), do: ETS.list(@table)
+      def all(), do: :ets.tab2list(@table)
 
       def get(object, default \\ nil), do: ETS.get(@table, object, default)
 
-      def exists?(object), do: ETS.exists?(@table, object)
+      def exists?(object), do: :ets.member(@table, object)
 
       def at_least(property, min) when is_integer(min) do
         ensure_props!([{property, min}])
-        ETS.at_least(@table, property, min)
+        Aspect.at_least(@table, property, min)
       end
 
       def at_most(property, max) when is_integer(max) do
         ensure_props!([{property, max}])
-        ETS.at_most(@table, property, max)
+        Aspect.at_most(@table, property, max)
       end
 
       def between(property, min, max) when is_integer(min) and is_integer(max) do
         ensure_props!([{property, min}, {property, max}])
-        ETS.between(@table, property, min, max)
+        Aspect.between(@table, property, min, max)
       end
 
       def match(properties) when is_props(properties) do
         ensure_props!(properties)
-        ETS.match(@table, properties)
+        Aspect.match(@table, properties)
       end
 
       defoverridable new: 0, new: 1, on_hook: 3
@@ -251,5 +251,64 @@ defmodule Genesis.Aspect do
         end)
       end
     end
+  end
+
+  @doc false
+  def match(table, pairs) do
+    guards =
+      Enum.map(pairs, fn {key, value} ->
+        {:==, {:map_get, key, :"$2"}, value}
+      end)
+
+    :ets.select(table, [
+      {
+        {:"$1", :"$2"},
+        [{:is_map, :"$2"} | guards],
+        [{{:"$1", :"$2"}}]
+      }
+    ])
+  end
+
+  @doc false
+  def at_least(table, key, value) do
+    :ets.select(table, [
+      {
+        {:"$1", :"$2"},
+        [
+          {:is_map, :"$2"},
+          {:>=, {:map_get, key, :"$2"}, value}
+        ],
+        [{{:"$1", :"$2"}}]
+      }
+    ])
+  end
+
+  @doc false
+  def at_most(table, key, value) do
+    :ets.select(table, [
+      {
+        {:"$1", :"$2"},
+        [
+          {:is_map, :"$2"},
+          {:"=<", {:map_get, key, :"$2"}, value}
+        ],
+        [{{:"$1", :"$2"}}]
+      }
+    ])
+  end
+
+  @doc false
+  def between(table, key, min, max) do
+    :ets.select(table, [
+      {
+        {:"$1", :"$2"},
+        [
+          {:is_map, :"$2"},
+          {:"=<", {:map_get, key, :"$2"}, max},
+          {:>=, {:map_get, key, :"$2"}, min}
+        ],
+        [{{:"$1", :"$2"}}]
+      }
+    ])
   end
 end
