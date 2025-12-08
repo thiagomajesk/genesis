@@ -151,7 +151,7 @@ defmodule Genesis.AspectTest do
     Health.attach(object_2, current: 50)
 
     assert [{^object_2, _}] = Health.at_least(:current, 50)
-    assert_raise ArgumentError, fn -> Health.at_least(:invalid, 50) end
+    assert_raise FunctionClauseError, fn -> Health.at_least(:invalid, 50) end
   end
 
   test "at_most/2", %{world: world} do
@@ -162,7 +162,7 @@ defmodule Genesis.AspectTest do
     Health.attach(object_2, current: 50)
 
     assert [{^object_1, _}] = Health.at_most(:current, 10)
-    assert_raise ArgumentError, fn -> Health.at_most(:invalid, 10) end
+    assert_raise FunctionClauseError, fn -> Health.at_most(:invalid, 10) end
   end
 
   test "between/3", %{world: world} do
@@ -174,7 +174,7 @@ defmodule Genesis.AspectTest do
 
     assert [{^object_1, _}] = Health.between(:current, 5, 15)
     assert [{^object_2, _}] = Health.between(:current, 40, 60)
-    assert_raise ArgumentError, fn -> Health.between(:invalid, 5, 15) end
+    assert_raise FunctionClauseError, fn -> Health.between(:invalid, 5, 15) end
   end
 
   test "match/1", %{world: world} do
@@ -186,6 +186,6 @@ defmodule Genesis.AspectTest do
 
     assert [{^object_1, _}] = Health.match(current: 100)
     assert [{^object_2, _}] = Health.match(current: 0, maximum: 100)
-    assert_raise ArgumentError, fn -> Health.match(invalid: 100) end
+    assert [] = Health.match(invalid: 100)
   end
 end

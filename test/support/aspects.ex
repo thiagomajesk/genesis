@@ -1,8 +1,8 @@
 defmodule Genesis.Aspects.Moniker do
   use Genesis.Aspect, events: [:describe]
 
-  prop :name, :binary
-  prop :description, :binary
+  prop :name, :string
+  prop :description, :string
 end
 
 defmodule Genesis.Aspects.Position do
@@ -27,10 +27,10 @@ end
 defmodule Genesis.Aspects.Container do
   use Genesis.Aspect, events: [:open, :close, :add, :remove]
 
-  prop :name, :binary
+  prop :name, :string
   prop :capacity, :integer, required: true
   prop :weight, :float, default: 0.0
-  prop :owner, :binary, default: "Unassigned"
+  prop :owner, :string, default: "Unassigned"
   prop :is_locked, :boolean, default: false
   prop :durability, :integer, default: 100
   prop :material, :atom, default: :wood
@@ -39,5 +39,5 @@ end
 defmodule Genesis.Aspects.MetaInfo do
   use Genesis.Aspect
 
-  prop :creation_date, :datetime
+  prop :creation_date, :any
 end

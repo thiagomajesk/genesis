@@ -152,11 +152,9 @@ defmodule Genesis.Aspect do
       @table __MODULE__
       @events Keyword.get(opts, :events, [])
 
-      Module.register_attribute(__MODULE__, :properties, accumulate: true)
-
-      defguard is_props(term) when is_list(term) or is_non_struct_map(term)
-
       import Genesis.Value, only: [prop: 2, prop: 3]
+
+      Genesis.Value.__setup__(__MODULE__, __ENV__.file, __ENV__.line)
 
       def init() do
         opts = [:set, :named_table, read_concurrency: true]
@@ -167,59 +165,64 @@ defmodule Genesis.Aspect do
 
       def on_hook(hook, object, aspect) when is_atom(hook), do: :ok
 
-      def attach(object), do: attach(object, %{})
-
-      def attach(object, properties) when is_props(properties),
-        do: attach(object, __MODULE__.new(properties))
-
-      def attach(object, %{__struct__: __MODULE__} = aspect),
-        do: Manager.attach_aspect(object, aspect)
-
-      def remove(object), do: Manager.remove_aspect(object, __MODULE__)
-
-      def replace(object, properties) when is_props(properties),
-        do: Manager.replace_aspect(object, __MODULE__, properties)
-
-      def update(object, property, fun) when is_atom(property) and is_function(fun, 1),
-        do: Manager.update_aspect(object, __MODULE__, property, fun)
-
-      def all(), do: :ets.tab2list(@table)
-
-      def get(object, default \\ nil), do: ETS.get(@table, object, default)
-
-      def exists?(object), do: :ets.member(@table, object)
-
-      def at_least(property, min) when is_integer(min) do
-        ensure_props!([{property, min}])
-        Aspect.at_least(@table, property, min)
-      end
-
-      def at_most(property, max) when is_integer(max) do
-        ensure_props!([{property, max}])
-        Aspect.at_most(@table, property, max)
-      end
-
-      def between(property, min, max) when is_integer(min) and is_integer(max) do
-        ensure_props!([{property, min}, {property, max}])
-        Aspect.between(@table, property, min, max)
-      end
-
-      def match(properties) when is_props(properties) do
-        ensure_props!(properties)
-        Aspect.match(@table, properties)
-      end
-
       defoverridable new: 0, new: 1, on_hook: 3
     end
   end
 
   defmacro __before_compile__(env) do
     quote do
-      defstruct Genesis.Value.defaults(@properties)
+      @valid_keys Enum.map(@properties, &elem(&1, 0))
+
+      defguardp is_prop(prop) when is_atom(prop) and prop in @valid_keys
+
+      defguardp is_props(props)
+                when (is_list(props) and props != []) or
+                       (is_non_struct_map(props) and props != %{})
+
+      defstruct Genesis.Value.__defaults__(@properties)
 
       def __aspect__(:table), do: @table
       def __aspect__(:events), do: @events
       def __aspect__(:properties), do: @properties
+
+      def cast(attrs), do: Genesis.Value.__cast__(attrs, @properties)
+
+      def attach(object), do: attach(object, __MODULE__.new())
+
+      def attach(object, props) when is_props(props),
+        do: attach(object, __MODULE__.new(props))
+
+      def attach(object, %{__struct__: __MODULE__} = aspect),
+        do: Manager.attach_aspect(object, aspect)
+
+      def remove(object), do: Manager.remove_aspect(object, __MODULE__)
+
+      def replace(object, props) when is_props(props),
+        do: Manager.replace_aspect(object, __MODULE__, props)
+
+      # We don't use a guard in this case because the return value has better semantics.
+      # The query functions on the other hand need it because returning empty would have
+      # two meanings: a) Invalid prop that will never match b) No object actually matched.
+      def update(object, prop, fun) when is_atom(prop) and is_function(fun, 1),
+        do: Manager.update_aspect(object, __MODULE__, prop, fun)
+
+      def all(), do: :ets.tab2list(@table)
+
+      def exists?(object), do: :ets.member(@table, object)
+
+      def get(object, default \\ nil), do: ETS.get(@table, object, default)
+
+      def match(prop) when is_props(prop), do: Aspect.__match__(@table, prop)
+
+      def at_least(prop, min) when is_prop(prop) and is_integer(min),
+        do: Aspect.__at_least__(@table, prop, min)
+
+      def at_most(prop, max) when is_prop(prop) and is_integer(max),
+        do: Aspect.__at_most__(@table, prop, max)
+
+      def between(prop, min, max)
+          when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
+          do: Aspect.__between__(@table, prop, min, max)
 
       if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 1}) do
         raise CompileError,
@@ -230,31 +233,11 @@ defmodule Genesis.Aspect do
           Please specify the events this aspect handles using `use Genesis.Aspect, events: [:event1, :event2]`.
           """
       end
-
-      def cast(attrs), do: Genesis.Value.cast(attrs, @properties)
-
-      defp ensure_props!(pairs) do
-        valid_props = Map.new(@properties, fn {name, type, _opts} -> {name, type} end)
-
-        Enum.each(pairs, fn {property, value} ->
-          case Map.fetch(valid_props, property) do
-            {:ok, type} ->
-              Genesis.Value.ensure_type!(value, type)
-
-            :error ->
-              raise ArgumentError,
-                    """
-                    The property #{inspect(property)} does not exist in aspect #{inspect(__MODULE__)}.
-                    Perhaps you meant to use one of the following instead: #{inspect(Map.keys(valid_props))}
-                    """
-          end
-        end)
-      end
     end
   end
 
   @doc false
-  def match(table, pairs) do
+  def __match__(table, pairs) do
     guards =
       Enum.map(pairs, fn {key, value} ->
         {:==, {:map_get, key, :"$2"}, value}
@@ -270,7 +253,7 @@ defmodule Genesis.Aspect do
   end
 
   @doc false
-  def at_least(table, key, value) do
+  def __at_least__(table, key, value) do
     :ets.select(table, [
       {
         {:"$1", :"$2"},
@@ -284,7 +267,7 @@ defmodule Genesis.Aspect do
   end
 
   @doc false
-  def at_most(table, key, value) do
+  def __at_most__(table, key, value) do
     :ets.select(table, [
       {
         {:"$1", :"$2"},
@@ -298,7 +281,7 @@ defmodule Genesis.Aspect do
   end
 
   @doc false
-  def between(table, key, min, max) do
+  def __between__(table, key, min, max) do
     :ets.select(table, [
       {
         {:"$1", :"$2"},
