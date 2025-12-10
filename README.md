@@ -35,7 +35,7 @@ defmodule Durability do
 
   prop :durability, :integer, default: 100
 
-  def handle_event(%{name: :attack} = event) do
+  def handle_event(:attack, event) do
     update(event.object, :durability, &(&1 - event.args.damage))
     {:cont, event}
   end
@@ -50,7 +50,7 @@ defmodule Flammable do
 
   prop :burning, :boolean, default: false
 
-  def handle_event(%{name: :attack} = event) do
+  def handle_event(:attack, event) do
     if event.args.type == :fire do
       replace(event.object, :burning, true)
     end

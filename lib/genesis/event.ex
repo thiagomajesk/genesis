@@ -36,8 +36,8 @@ defmodule Genesis.Event do
   end
 
   defp maybe_handle_event(module, event) do
-    if function_exported?(module, :handle_event, 1),
-      do: module.handle_event(event),
+    if function_exported?(module, :handle_event, 2),
+      do: module.handle_event(event.name, event),
       else: {:cont, event}
   end
 end

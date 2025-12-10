@@ -11,7 +11,7 @@ defmodule Genesis.Aspect do
   @type props :: keyword() | map()
   @type object :: integer() | atom() | binary()
 
-  @optional_callbacks handle_event: 1
+  @optional_callbacks handle_event: 2
 
   @doc """
   Initializes the aspect ETS table.
@@ -136,13 +136,12 @@ defmodule Genesis.Aspect do
 
   @doc """
   Handles events dispatched to this aspect via its parent object.
-  Receives the event name, the object and a map of arguments for the event.
 
   Given that the same event is dispatched to all aspects within an object, this
   function should return a tuple with `:cont` or `:halt` to either keep processing
   the event or stop propagating the event to the remaining aspects in the pipeline.
   """
-  @callback handle_event(event()) :: {:cont, event()} | {:halt, event()}
+  @callback handle_event(atom(), event()) :: {:cont, event()} | {:halt, event()}
 
   defmacro __using__(opts \\ []) do
     quote bind_quoted: [opts: opts] do
@@ -224,12 +223,12 @@ defmodule Genesis.Aspect do
           when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
           do: Aspect.__between__(@table, prop, min, max)
 
-      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 1}) do
+      if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 2}) do
         raise CompileError,
           file: unquote(env.file),
           line: unquote(env.line),
           description: """
-          Aspect #{unquote(env.module)} defines handle_event/1 but does not specify any events.
+          Aspect #{unquote(env.module)} defines handle_event/2 but does not specify any events.
           Please specify the events this aspect handles using `use Genesis.Aspect, events: [:event1, :event2]`.
           """
       end

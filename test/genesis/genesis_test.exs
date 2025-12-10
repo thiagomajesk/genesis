@@ -7,7 +7,7 @@ defmodule Genesis.GenesisTest do
   defmodule Ping do
     use Genesis.Aspect, events: [:ping, :check]
 
-    def handle_event(event) do
+    def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
       send(event.from, {__MODULE__, event.object, DateTime.utc_now()})
       {:cont, event}
@@ -17,7 +17,7 @@ defmodule Genesis.GenesisTest do
   defmodule Pong do
     use Genesis.Aspect, events: [:pong, :check]
 
-    def handle_event(event) do
+    def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
       send(event.from, {__MODULE__, event.object, DateTime.utc_now()})
       {:cont, event}
