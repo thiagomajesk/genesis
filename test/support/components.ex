@@ -1,31 +1,31 @@
-defmodule Genesis.Aspects.Moniker do
-  use Genesis.Aspect, events: [:describe]
+defmodule Genesis.Components.Moniker do
+  use Genesis.Component, events: [:describe]
 
   prop :name, :string
   prop :description, :string
 end
 
-defmodule Genesis.Aspects.Position do
-  use Genesis.Aspect, events: [:move]
+defmodule Genesis.Components.Position do
+  use Genesis.Component, events: [:move]
 
   prop :x, :integer
   prop :y, :integer
 end
 
-defmodule Genesis.Aspects.Health do
-  use Genesis.Aspect, events: [:damage]
+defmodule Genesis.Components.Health do
+  use Genesis.Component, events: [:damage]
 
   prop :current, :integer
   prop :maximum, :integer
 end
 
-defmodule Genesis.Aspects.Selectable do
-  use Genesis.Aspect, events: [:select, :deselect]
+defmodule Genesis.Components.Selectable do
+  use Genesis.Component, events: [:select, :deselect]
   # No properties defined (this will function as a tag)
 end
 
-defmodule Genesis.Aspects.Container do
-  use Genesis.Aspect, events: [:open, :close, :add, :remove]
+defmodule Genesis.Components.Container do
+  use Genesis.Component, events: [:open, :close, :add, :remove]
 
   prop :name, :string
   prop :capacity, :integer, required: true
@@ -36,8 +36,8 @@ defmodule Genesis.Aspects.Container do
   prop :material, :atom, default: :wood
 end
 
-defmodule Genesis.Aspects.MetaInfo do
-  use Genesis.Aspect
+defmodule Genesis.Components.MetaInfo do
+  use Genesis.Component
 
   prop :creation_date, :any
 end

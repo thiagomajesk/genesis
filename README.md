@@ -25,52 +25,51 @@ end
 
 This tutorial will walk you through creating a combat system where a sword can attack and potentially ignite a flammable barrel.
 
-### Defining Aspects
+### Defining Components
 
-Aspects are modular pieces of behavior that can be attached to game objects. Let's start with a `Durability` aspect that handles damage:
+Components are modular pieces of behavior that can be attached to game entities. Let's start with a `Durability` component that handles damage:
 
 ```elixir
 defmodule Durability do
-  use Genesis.Aspect, events: [:attack]
+  use Genesis.Component, events: [:attack]
 
   prop :durability, :integer, default: 100
 
   def handle_event(:attack, event) do
-    update(event.object, :durability, &(&1 - event.args.damage))
+    update(event.entity, :durability, &(&1 - event.args.damage))
     {:cont, event}
   end
 end
 ```
 
-Next, let's create a `Flammable` aspect that can be ignited by fire damage:
+Next, let's create a `Flammable` component that can be ignited by fire damage:
 
 ```elixir
 defmodule Flammable do
-  use Genesis.Aspect, events: [:attack]
+  use Genesis.Component, events: [:attack]
 
   prop :burning, :boolean, default: false
 
   def handle_event(:attack, event) do
     if event.args.type == :fire do
-      replace(event.object, :burning, true)
+      update(event.entity, burning: true)
     end
     {:cont, event}
   end
 end
 ```
 
-### Registering Aspects
+### Registering Components
 
-Before using aspects, they need to be registered with the manager:
+Before using components, they need to be registered with the manager:
 
 ```elixir
-Genesis.Manager.register_aspect(Durability)
-Genesis.Manager.register_aspect(Flammable)
+Genesis.Manager.register_components([Durability, Flammable])
 ```
 
-### Starting a World and Creating Objects
+### Starting a World and Creating Entities
 
-Now we can create a world, instantiate objects, and attach aspects:
+Now we can create a world, instantiate entities, and attach components:
 
 ```elixir
 {:ok, world} = Genesis.World.start_link()
@@ -103,7 +102,7 @@ Flammable.get(barrel)
 #=> %Flammable{burning: true}
 ```
 
-This example demonstrates the core Genesis workflow: defining aspects with behavior, registering them, instantiating objects in a world, attaching aspects, and dispatching events to drive game logic.
+This example demonstrates the core Genesis workflow: defining components with behavior, registering them, instantiating entities in a world, attaching components, and dispatching events to drive game logic.
 
 ## Special Thanks ❤️
 

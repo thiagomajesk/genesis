@@ -14,24 +14,24 @@ defmodule Genesis.Envoy do
 
   @impl true
   def handle_events(events, _from, state) do
-    # Grouping events by object ensures that we can process different batches
-    # concurrently while maintaining the order of events for the same object.
-    groups = Enum.group_by(events, & &1.object)
+    # Grouping events by entity ensures that we can process different batches
+    # concurrently while maintaining the order of events for the same entity.
+    groups = Enum.group_by(events, & &1.entity)
 
-    # Then, we check if a worker is already processing events for that object (busy).
+    # Then, we check if a worker is already processing events for that entity (busy).
     # If there are none, we can emit events for processing right away. Otherwise,
     # events are queued until the worker "acks" that a batch has been processed.
     {to_emit, state} =
-      Enum.reduce(groups, {[], state}, fn {object, events}, {to_emit, state} ->
-        case Map.get(state, object) do
+      Enum.reduce(groups, {[], state}, fn {entity, events}, {to_emit, state} ->
+        case Map.get(state, entity) do
           nil ->
             queue = :queue.new()
-            new_state = Map.put(state, object, {:busy, queue})
-            {[{object, events} | to_emit], new_state}
+            new_state = Map.put(state, entity, {:busy, queue})
+            {[{entity, events} | to_emit], new_state}
 
           {:busy, queue} ->
             queue = :queue.in(events, queue)
-            {to_emit, Map.put(state, object, {:busy, queue})}
+            {to_emit, Map.put(state, entity, {:busy, queue})}
         end
       end)
 
@@ -39,11 +39,11 @@ defmodule Genesis.Envoy do
   end
 
   @impl true
-  def handle_info({:ack, object}, state) do
-    # When a worker acknowledges that it has finished processing a batch for an object,
-    # we check if there are more events queued up for that object. If so, we emit the next
-    # batch for processing right away. Otherwise, we "free" the object from the queue.
-    case Map.pop(state, object) do
+  def handle_info({:ack, entity}, state) do
+    # When a worker acknowledges that it has finished processing a batch for an entity,
+    # we check if there are more events queued up for that entity. If so, we emit the next
+    # batch for processing right away. Otherwise, we "free" the entity from the queue.
+    case Map.pop(state, entity) do
       {nil, state} ->
         {:noreply, [], state}
 
@@ -53,8 +53,8 @@ defmodule Genesis.Envoy do
             {:noreply, [], state}
 
           {{:value, events}, queue} ->
-            state = Map.put(state, object, {:busy, queue})
-            {:noreply, [{object, events}], state}
+            state = Map.put(state, entity, {:busy, queue})
+            {:noreply, [{entity, events}], state}
         end
     end
   end

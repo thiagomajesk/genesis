@@ -14,8 +14,10 @@ defmodule Genesis.Utils do
     |> Macro.underscore()
   end
 
-  def aspect?(module) when is_atom(module) do
+  def component?(module) when is_atom(module) do
     attributes = module.__info__(:attributes)
-    Genesis.Aspect in Access.get(attributes, :behaviour, [])
+    # NOTE: For some reason, we get two keys for :behaviour
+    behaviours = Keyword.get_values(attributes, :behaviour)
+    Genesis.Component in List.flatten(behaviours)
   end
 end

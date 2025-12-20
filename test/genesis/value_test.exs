@@ -8,7 +8,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/property names must atoms/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(NonAtomNameFixture, {"invalid", :string, []})
+        component_fixture(NonAtomNameFixture, {"invalid", :string, []})
       end
     end
 
@@ -16,7 +16,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/property type must be one of/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(InvalidTypeFixture, {:invalid, :invalid, []})
+        component_fixture(InvalidTypeFixture, {:invalid, :invalid, []})
       end
     end
 
@@ -24,7 +24,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/cannot have both :required and :default/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(
+        component_fixture(
           RequiredWithDefaultFixture,
           {:age, :integer, [required: true, default: 10]}
         )
@@ -35,7 +35,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/the :required option must be a boolean/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(NonBooleanRequiredFixture, {:flag, :boolean, [required: :yes]})
+        component_fixture(NonBooleanRequiredFixture, {:flag, :boolean, [required: :yes]})
       end
     end
 
@@ -43,7 +43,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/not a valid default/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(InvalidDefaultFixture, {:age, :integer, [default: "invalid"]})
+        component_fixture(InvalidDefaultFixture, {:age, :integer, [default: "invalid"]})
       end
     end
 
@@ -51,7 +51,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:values option must be a list/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(NonListValuesFixture, {:age, :integer, [values: 1]})
+        component_fixture(NonListValuesFixture, {:age, :integer, [values: 1]})
       end
     end
 
@@ -59,7 +59,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:values option contains invalid values/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(InvalidValuesFixture, {:age, :integer, [values: ["invalid"]]})
+        component_fixture(InvalidValuesFixture, {:age, :integer, [values: ["invalid"]]})
       end
     end
 
@@ -67,7 +67,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:format option can only be used with properties of type :string/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(FormatOnNonStringFixture, {:age, :integer, [format: ~r/\d+/]})
+        component_fixture(FormatOnNonStringFixture, {:age, :integer, [format: ~r/\d+/]})
       end
     end
 
@@ -75,7 +75,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:format option must be a Regex/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(FormatNotRegexFixture, {:name, :string, [format: ".*"]})
+        component_fixture(FormatNotRegexFixture, {:name, :string, [format: ".*"]})
       end
     end
 
@@ -83,7 +83,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:min option must be an integer or float/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(NonNumberMinFixture, {:age, :integer, [min: "invalid"]})
+        component_fixture(NonNumberMinFixture, {:age, :integer, [min: "invalid"]})
       end
     end
 
@@ -92,7 +92,7 @@ defmodule Genesis.ValueTest do
         ~r/:min option can only be used with properties of type :integer, :float, or :string/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(MinUnsupportedTypeFixture, {:flag, :boolean, [min: 1]})
+        component_fixture(MinUnsupportedTypeFixture, {:flag, :boolean, [min: 1]})
       end
     end
 
@@ -100,7 +100,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:max option must be an integer or float/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(NonNumberMaxFixture, {:age, :integer, [max: "invalid"]})
+        component_fixture(NonNumberMaxFixture, {:age, :integer, [max: "invalid"]})
       end
     end
 
@@ -109,7 +109,7 @@ defmodule Genesis.ValueTest do
         ~r/:max option can only be used with properties of type :integer, :float, or :string/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(MaxUnsupportedTypeFixture, {:flag, :boolean, [max: 1]})
+        component_fixture(MaxUnsupportedTypeFixture, {:flag, :boolean, [max: 1]})
       end
     end
 
@@ -117,7 +117,7 @@ defmodule Genesis.ValueTest do
       error_msg = ~r/:min option cannot be greater than the :max option/
 
       assert_raise CompileError, error_msg, fn ->
-        aspect_fixture(MinGreaterThanMaxFixture, {:age, :integer, [min: 5, max: 1]})
+        component_fixture(MinGreaterThanMaxFixture, {:age, :integer, [min: 5, max: 1]})
       end
     end
   end
@@ -302,9 +302,9 @@ defmodule Genesis.ValueTest do
   defp fixture(:integer), do: 42
   defp fixture(:boolean), do: true
 
-  defp aspect_fixture(suffix, {name, type, opts}) when is_atom(suffix) do
+  defp component_fixture(suffix, {name, type, opts}) when is_atom(suffix) do
     defmodule Module.concat(__MODULE__, suffix) do
-      use Genesis.Aspect
+      use Genesis.Component
       prop(name, type, opts)
     end
   end

@@ -1,25 +1,30 @@
 defmodule Genesis.ManagerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Genesis.Manager
   alias Genesis.Prefab
-  alias Genesis.Aspects.Health
-  alias Genesis.Aspects.Container
-  alias Genesis.Aspects.Moniker
-  alias Genesis.Aspects.MetaInfo
-  alias Genesis.Aspects.Position
-  alias Genesis.Aspects.Selectable
+  alias Genesis.Components.Health
+  alias Genesis.Components.Container
+  alias Genesis.Components.Moniker
+  alias Genesis.Components.MetaInfo
+  alias Genesis.Components.Position
+  alias Genesis.Components.Selectable
 
   setup do
+    :ok = Manager.init()
     on_exit(fn -> Manager.reset() end)
   end
 
-  describe "register_aspect" do
-    test "with default alias" do
-      Manager.register_aspect(Health)
-      Manager.register_aspect(Moniker)
-      Manager.register_aspect(Position)
-      Manager.register_aspect(Selectable)
+  describe "components" do
+    test "register_component with default alias" do
+      Manager.register_components([
+        Health,
+        Moniker,
+        Position,
+        Selectable
+      ])
+
+      components = Manager.components()
 
       assert [
                {"health", Health},
@@ -27,14 +32,18 @@ defmodule Genesis.ManagerTest do
                {"position", Position},
                {"selectable", Selectable}
              ] =
-               Manager.list_aspects()
+               Enum.sort(components)
     end
 
-    test "with custom alias" do
-      Manager.register_aspect({"prefix::health", Health})
-      Manager.register_aspect({"prefix::moniker", Moniker})
-      Manager.register_aspect({"prefix::position", Position})
-      Manager.register_aspect({"prefix::selectable", Selectable})
+    test "register_component with custom alias" do
+      Manager.register_components([
+        {"prefix::health", Health},
+        {"prefix::moniker", Moniker},
+        {"prefix::position", Position},
+        {"prefix::selectable", Selectable}
+      ])
+
+      components = Manager.components()
 
       assert [
                {"prefix::health", Health},
@@ -42,124 +51,41 @@ defmodule Genesis.ManagerTest do
                {"prefix::position", Position},
                {"prefix::selectable", Selectable}
              ] =
-               Manager.list_aspects()
+               Enum.sort(components)
     end
   end
 
-  test "attach_aspect/2" do
-    Manager.register_aspect(Health)
-    Manager.register_aspect(Moniker)
-    Manager.register_aspect(Position)
-    Manager.register_aspect(Selectable)
+  describe "handlers" do
+    test "list all event handlers" do
+      Manager.register_components([Health, Moniker])
 
-    object = make_ref()
+      assert {:damage, [Health]} in Manager.handlers()
+      assert {:describe, [Moniker]} in Manager.handlers()
+    end
 
-    health = %Health{current: 100}
-    moniker = %Moniker{name: "Foo"}
-    position = %Position{x: 0, y: 0}
-    selectable = %Selectable{}
+    test "lists handlers for specific events" do
+      Manager.register_components([Health, Moniker])
 
-    Manager.attach_aspect(object, health)
-    Manager.attach_aspect(object, moniker)
-    Manager.attach_aspect(object, position)
-    Manager.attach_aspect(object, selectable)
-
-    assert ^health = Health.get(object)
-    assert ^moniker = Moniker.get(object)
-    assert ^position = Position.get(object)
-    assert ^selectable = Selectable.get(object)
-  end
-
-  test "remove_aspect/2" do
-    Manager.register_aspect(Health)
-    Manager.register_aspect(Moniker)
-    Manager.register_aspect(Position)
-    Manager.register_aspect(Selectable)
-
-    object = make_ref()
-
-    health = %Health{current: 100}
-    moniker = %Moniker{name: "Foo"}
-    position = %Position{x: 0, y: 0}
-    selectable = %Selectable{}
-
-    Manager.attach_aspect(object, health)
-    Manager.attach_aspect(object, moniker)
-    Manager.attach_aspect(object, position)
-    Manager.attach_aspect(object, selectable)
-
-    Manager.remove_aspect(object, Selectable)
-
-    refute Selectable.get(object)
-    assert ^health = Health.get(object)
-    assert ^moniker = Moniker.get(object)
-    assert ^position = Position.get(object)
-  end
-
-  test "replace_aspect/3" do
-    Manager.register_aspect(Health)
-    Manager.register_aspect(Moniker)
-    Manager.register_aspect(Position)
-    Manager.register_aspect(Selectable)
-
-    object = make_ref()
-
-    health = %Health{current: 100}
-    moniker = %Moniker{name: "Foo"}
-    position = %Position{x: 0, y: 0}
-
-    Manager.attach_aspect(object, health)
-    Manager.attach_aspect(object, moniker)
-    Manager.attach_aspect(object, position)
-
-    Manager.replace_aspect(object, Health, %{current: 50})
-    Manager.replace_aspect(object, Moniker, %{name: "Bar"})
-    Manager.replace_aspect(object, Position, %{x: 10, y: 10})
-
-    assert %Health{current: 50} = Health.get(object)
-    assert %Moniker{name: "Bar"} = Moniker.get(object)
-    assert %Position{x: 10, y: 10} = Position.get(object)
-  end
-
-  test "update_aspect/4" do
-    Manager.register_aspect(Health)
-    Manager.register_aspect(Moniker)
-    Manager.register_aspect(Position)
-    Manager.register_aspect(Selectable)
-
-    object = make_ref()
-
-    health = %Health{current: 100}
-    moniker = %Moniker{name: "Foo"}
-    position = %Position{x: 0, y: 0}
-
-    Manager.attach_aspect(object, health)
-    Manager.attach_aspect(object, moniker)
-    Manager.attach_aspect(object, position)
-
-    Manager.update_aspect(object, Health, :current, &(&1 - 50))
-    Manager.update_aspect(object, Moniker, :name, fn _name -> "Baz" end)
-    Manager.update_aspect(object, Position, :x, &(&1 + 10))
-    Manager.update_aspect(object, Position, :y, &(&1 + 10))
-
-    assert %Health{current: 50} = Health.get(object)
-    assert %Moniker{name: "Baz"} = Moniker.get(object)
-    assert %Position{x: 10, y: 10} = Position.get(object)
+      assert [Health] == Manager.handlers(:damage)
+      assert [Moniker] == Manager.handlers(:describe)
+    end
   end
 
   describe "prefabs" do
     test "create prefab with map and default alias" do
       now = DateTime.utc_now()
 
-      Manager.register_aspect(Health)
-      Manager.register_aspect(Moniker)
-      Manager.register_aspect(Position)
-      Manager.register_aspect(Selectable)
-      Manager.register_aspect(MetaInfo)
+      Manager.register_components([
+        Health,
+        Moniker,
+        Position,
+        Selectable,
+        MetaInfo
+      ])
 
       Manager.register_prefab(%{
         name: "Being",
-        aspects: %{
+        components: %{
           "health" => %{current: 100},
           "moniker" => %{name: "Being"},
           "meta_info" => %{creation_date: now},
@@ -168,7 +94,7 @@ defmodule Genesis.ManagerTest do
         }
       })
 
-      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
 
       assert [
                %Selectable{},
@@ -176,21 +102,23 @@ defmodule Genesis.ManagerTest do
                %Health{current: 100},
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
+             ] = Enum.sort(components)
     end
 
     test "create prefab with list and custom alias" do
       now = DateTime.utc_now()
 
-      Manager.register_aspect({"prefix::health", Health})
-      Manager.register_aspect({"prefix::moniker", Moniker})
-      Manager.register_aspect({"prefix::position", Position})
-      Manager.register_aspect({"prefix::selectable", Selectable})
-      Manager.register_aspect({"prefix::meta_info", MetaInfo})
+      Manager.register_components([
+        {"prefix::health", Health},
+        {"prefix::moniker", Moniker},
+        {"prefix::position", Position},
+        {"prefix::selectable", Selectable},
+        {"prefix::meta_info", MetaInfo}
+      ])
 
       Manager.register_prefab(%{
         name: "Being",
-        aspects: [
+        components: [
           {"prefix::health", %{current: 100}},
           {"prefix::moniker", %{name: "Being"}},
           {"prefix::meta_info", %{creation_date: now}},
@@ -199,7 +127,7 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
 
       assert [
                %Selectable{},
@@ -207,21 +135,23 @@ defmodule Genesis.ManagerTest do
                %Health{current: 100},
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
+             ] = Enum.sort(components)
     end
 
     test "create prefab with keyword list" do
       now = DateTime.utc_now()
 
-      Manager.register_aspect({:health, Health})
-      Manager.register_aspect({:moniker, Moniker})
-      Manager.register_aspect({:position, Position})
-      Manager.register_aspect({:selectable, Selectable})
-      Manager.register_aspect({:meta_info, MetaInfo})
+      Manager.register_components([
+        {:health, Health},
+        {:moniker, Moniker},
+        {:position, Position},
+        {:selectable, Selectable},
+        {:meta_info, MetaInfo}
+      ])
 
       Manager.register_prefab(%{
         name: "Being",
-        aspects: [
+        components: [
           health: %{current: 100},
           moniker: %{name: "Being"},
           meta_info: %{creation_date: now},
@@ -230,7 +160,7 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{extends: [], aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
 
       assert [
                %Selectable{},
@@ -238,15 +168,15 @@ defmodule Genesis.ManagerTest do
                %Health{current: 100},
                %Moniker{name: "Being"},
                %Position{y: 20, x: 10}
-             ] = Enum.sort(aspects)
+             ] = Enum.sort(components)
     end
 
     test "create prefab with props as string keys" do
-      Manager.register_aspect(Container)
+      Manager.register_components([Container])
 
       Manager.register_prefab(%{
         name: "Crate",
-        aspects: %{
+        components: %{
           "container" => %{
             "capacity" => 10,
             "name" => "Crate"
@@ -254,10 +184,10 @@ defmodule Genesis.ManagerTest do
         }
       })
 
-      assert [{"Crate", %Prefab{aspects: aspects}}] = Manager.list_prefabs()
+      assert [{"Crate", %Prefab{components: components}}] = Manager.prefabs()
 
       assert [%Container{capacity: 10, name: "Crate"}] =
-               Enum.filter(aspects, &match?(%Container{}, &1))
+               Enum.filter(components, &match?(%Container{}, &1))
     end
   end
 end

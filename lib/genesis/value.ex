@@ -2,7 +2,7 @@ defmodule Genesis.Value do
   @types [:any, :atom, :string, :boolean, :float, :integer]
 
   @doc """
-  Defines a property for an Aspect.
+  Defines a property for a Component.
 
   ## Types
 

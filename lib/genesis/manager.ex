@@ -1,262 +1,172 @@
 defmodule Genesis.Manager do
-  @moduledoc """
-  The Manager is a GenServer responsible for coordinating changes to the game registry.
-  It ensures that all changes write operations are serialized to maintain consistency,
-  and provides functions to register aspects and prefabs that will be used by the game.
-  """
-  use GenServer
-
-  @events_table :genesis_events
-  @aspects_table :genesis_aspects
-  @prefabs_table :genesis_prefabs
-  @objects_table :genesis_objects
-
   @doc """
-  Returns the ETS table name used for the given registry.
-  """
-  def table(:events), do: @events_table
-  def table(:aspects), do: @aspects_table
-  def table(:prefabs), do: @prefabs_table
-  def table(:objects), do: @objects_table
+  Creates a new entity in the registry.
 
-  def start_link(args \\ %{}) do
-    GenServer.start_link(__MODULE__, args, name: __MODULE__)
+      iex> Genesis.Manager.entity!()
+      #Reference<0.1234567890.1234567890.12345>
+  """
+  def entity! do
+    case Genesis.Registry.create(:entities) do
+      {:ok, entity} -> entity
+      {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
+    end
   end
 
   @doc """
-  List all aspects registered in the game.
+  Returns all components registered in the manager.
 
-      iex> Genesis.Manager.list_aspects()
+      iex> Genesis.Manager.components()
       [{"health", Health}, {"position", Position}]
   """
-  def list_aspects() do
-    :ets.select(@aspects_table, [{{:"$1", :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
+  def components do
+    match_spec = [
+      {
+        {:_, :_, :"$1", %{module: :"$2"}},
+        [],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(:components, :metadata, match_spec)
   end
 
   @doc """
-  Lists all prefabs registered in the game.
+  Returns all prefabs registered in the manager.
 
-      iex> Genesis.Manager.list_prefabs()
-      [{"Being", %Genesis.Prefab{aspects: aspects}}]
+      iex> Genesis.Manager.prefabs()
+      [{"Being", %Genesis.Prefab{components: components}}]
   """
-  def list_prefabs() do
-    :ets.select(@prefabs_table, [{{:"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
+  def prefabs do
+    metadata_stream = Genesis.Registry.metadata(:prefabs)
+    lookup = Map.new(metadata_stream, fn {entity, info} -> {entity, info} end)
+
+    entities_stream = Genesis.Registry.entities(:prefabs)
+
+    Enum.map(entities_stream, fn {entity, info} ->
+      {name, %{extends: extends}} = Map.fetch!(lookup, entity)
+      components = Enum.map(info, fn {_type, component} -> component end)
+      {name, %Genesis.Prefab{name: name, extends: extends, components: components}}
+    end)
   end
 
   @doc """
-  Registers an aspect module with an optional custom alias.
+  Returns all event handlers registered in the manager.
+  """
+  def handlers do
+    Enum.reduce(:persistent_term.get(), %{}, fn
+      {{:genesis, :events, event}, handlers}, acc ->
+        Map.put(acc, event, Enum.reverse(handlers))
 
-  Alias are useful to scope aspects in different domains.
+      {_other_key, _other_value}, acc ->
+        acc
+    end)
+  end
+
+  @doc """
+  Returns the handlers registered for a specific event.
+  """
+  def handlers(event) when is_atom(event) do
+    key = {:genesis, :events, event}
+    Enum.reverse(:persistent_term.get(key, []))
+  end
+
+  @doc """
+  Registers a component module with an optional custom alias.
+
+  Alias are useful to scope components in different domains.
   If only the module is provided, a default alias is used.
 
-      iex> Genesis.Manager.register_aspect(Health)
-      iex> Genesis.Manager.register_aspect({"prefix::health", Health})
+      iex> Genesis.Manager.register_components([Health])
+      iex> Genesis.Manager.register_components([{"prefix::health", Health}])
   """
-  def register_aspect(module_or_tuple)
+  def register_components(components) when is_list(components) do
+    registered =
+      components
+      |> Enum.map(&register_component!/1)
+      |> Enum.reduce(%{}, fn {_entity, metadata}, lookup ->
+        Enum.reduce(metadata.events, lookup, fn event, lookup ->
+          Map.update(lookup, event, [metadata.module], &[metadata.module | &1])
+        end)
+      end)
 
-  def register_aspect(module) when is_atom(module) do
-    register_aspect({Genesis.Utils.aliasify(module), module})
-  end
-
-  def register_aspect({as, module}) when is_atom(module) do
-    GenServer.call(__MODULE__, {:register_aspect, {as, module}})
+    Enum.each(registered, fn {event, component_types} ->
+      :persistent_term.put({:genesis, :events, event}, component_types)
+    end)
   end
 
   @doc """
   Registers a new prefab definition.
-  Prefabs are templates for creating objects with predefined aspects and properties.
-
-      iex> Genesis.Manager.register_prefab(%{
-      ...>   name: "Being",
-      ...>   aspects: %{
-      ...>     "health" => %{current: 100},
-      ...>     "moniker" => %{name: "Being"}
-      ...>   }
-      ...> })
-
-  Prefabs can also extend other prefabs to create complex object hierarchies.
-
-      iex> Genesis.Manager.register_prefab(%{
-      ...>   name: "Human",
-      ...>   extends: "Being",
-      ...>   aspects: %{
-      ...>     "moniker" => %{name: "Human"}
-      ...>   }
-      ...> })
-
-  When a prefab extends another, it will include all aspects of the parent prefab, allowing for reusable definitions.
-  When loading prefabs, the aspects defined by a child prefab have precedence over those defined in the parent.
+  Prefabs are templates for creating entities with predefined components and properties.
   """
   def register_prefab(attrs) when is_map(attrs) do
-    GenServer.call(__MODULE__, {:register_prefab, attrs})
+    %{name: name, extends: extends, components: components} =
+      Genesis.Prefab.load(attrs, prefabs: prefabs(), components: components())
+
+    case Genesis.Registry.lookup(:prefabs, name) do
+      {_entity, _name, _metadata} ->
+        {:error, :already_registered}
+
+      nil ->
+        registered_at = System.system_time()
+        metadata = %{registered_at: registered_at, extends: extends}
+
+        with {:ok, entity} <- Genesis.Registry.create(:prefabs, name: name, metadata: metadata),
+             :ok <- Genesis.Registry.assign(:prefabs, entity, components) do
+          {:ok, {entity, metadata, components}}
+        end
+    end
   end
 
   @doc false
-  def reset(timeout \\ :infinity) do
-    GenServer.call(__MODULE__, :reset, timeout)
+  def init do
+    with :ok <- Genesis.Registry.init(:prefabs),
+         :ok <- Genesis.Registry.init(:entities),
+         :ok <- Genesis.Registry.init(:components),
+         do: :ok
   end
 
   @doc false
-  def attach_aspect(object, aspect) when is_struct(aspect) do
-    GenServer.call(__MODULE__, {:attach_aspect, object, aspect})
+  def reset() do
+    with :ok <- clear_event_lookup(),
+         :ok <- Genesis.Registry.clear(:prefabs),
+         :ok <- Genesis.Registry.clear(:entities),
+         :ok <- Genesis.Registry.clear(:components),
+         do: :ok
   end
 
-  @doc false
-  def remove_aspect(object, module) when is_atom(module) do
-    GenServer.call(__MODULE__, {:remove_aspect, object, module})
+  def register_component!(component_type) when is_atom(component_type) do
+    register_component!({Genesis.Utils.aliasify(component_type), component_type})
   end
 
-  @doc false
-  def replace_aspect(object, module, properties) when is_atom(module) do
-    GenServer.call(__MODULE__, {:replace_aspect, object, module, properties})
+  def register_component!({name, component_type}) when is_atom(component_type) do
+    if not Genesis.Utils.component?(component_type) do
+      raise ArgumentError, "Invalid component type #{inspect(component_type)}"
+    end
+
+    case Genesis.Registry.lookup(:components, name) do
+      {_entity, name, _metadata} ->
+        raise ArgumentError, "component #{inspect(name)} is already registered"
+
+      nil ->
+        registered_at = System.system_time()
+        events = component_type.__component__(:events)
+        metadata = %{registered_at: registered_at, events: events, module: component_type}
+
+        case Genesis.Registry.create(:components, name: name, metadata: metadata) do
+          {:ok, entity} ->
+            {entity, metadata}
+
+          {:error, reason} ->
+            raise "failed to register component #{inspect(name)}: #{inspect(reason)}"
+        end
+    end
   end
 
-  @doc false
-  def update_aspect(object, module, property, fun) when is_atom(module) do
-    GenServer.call(__MODULE__, {:update_aspect, object, module, property, fun})
-  end
-
-  @impl true
-  def init(_args) do
-    Genesis.ETS.new(@objects_table, [:bag, :named_table])
-    Genesis.ETS.new(@prefabs_table, [:set, :named_table])
-
-    Genesis.ETS.new(@events_table, [:ordered_set, :named_table])
-    Genesis.ETS.new(@aspects_table, [:ordered_set, :named_table])
-
-    {:ok, %{aspects_tables: []}}
-  end
-
-  @impl true
-  def handle_call({:register_aspect, {as, module}}, _from, state) do
-    {table, events} = initialize_aspect!(module)
-
-    :ets.insert(@aspects_table, {as, module, events})
+  defp clear_event_lookup() do
+    events = Map.keys(handlers())
 
     Enum.each(events, fn event ->
-      Genesis.ETS.update(@events_table, event, [{as, module}], fn handlers ->
-        Enum.uniq(handlers ++ [{as, module}])
-      end)
+      :persistent_term.erase({:genesis, :events, event})
     end)
-
-    {:reply, :ok, Map.update!(state, :aspects_tables, &[table | &1])}
-  end
-
-  @impl true
-  def handle_call({:register_prefab, attrs}, _from, state) do
-    prefab =
-      Genesis.Prefab.load(attrs,
-        registered_aspects: list_aspects(),
-        registered_prefabs: list_prefabs()
-      )
-
-    Genesis.ETS.put(@prefabs_table, prefab.name, prefab)
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call({:attach_aspect, object, aspect}, _from, state) do
-    module = Map.fetch!(aspect, :__struct__)
-
-    case module.get(object) do
-      ^aspect ->
-        {:reply, :noop, state}
-
-      %{__struct__: ^module} ->
-        {:reply, :error, state}
-
-      nil ->
-        Genesis.ETS.put(@objects_table, object, aspect)
-        Genesis.ETS.put(aspect.__struct__, object, aspect)
-
-        module.on_hook(:attached, object, aspect)
-
-        {:reply, :ok, state}
-    end
-  end
-
-  @impl true
-  def handle_call({:remove_aspect, object, module}, _from, state) do
-    case module.get(object) do
-      nil ->
-        {:reply, :noop, state}
-
-      %{__struct__: ^module} = aspect ->
-        :ets.delete_object(@objects_table, {object, aspect})
-        Genesis.ETS.delete(module, object)
-
-        module.on_hook(:removed, object, aspect)
-
-        {:reply, :ok, state}
-
-      _other ->
-        {:reply, :error, state}
-    end
-  end
-
-  @impl true
-  def handle_call({:replace_aspect, object, module, properties}, _from, state) do
-    case module.get(object) do
-      nil ->
-        {:reply, :noop, state}
-
-      %{__struct__: ^module} = aspect ->
-        casted = module.cast(properties)
-        updated = Map.merge(aspect, casted)
-        replace_aspect!(object, updated)
-
-        module.on_hook(:replaced, object, updated)
-
-        {:reply, :ok, state}
-
-      _other ->
-        {:reply, :error, state}
-    end
-  end
-
-  @impl true
-  def handle_call({:update_aspect, object, module, property, fun}, _from, state) do
-    case module.get(object) do
-      nil ->
-        {:reply, :noop, state}
-
-      %{^property => value} = aspect ->
-        updated = Map.put(aspect, property, fun.(value))
-        replace_aspect!(object, updated)
-
-        module.on_hook(:updated, object, updated)
-
-        {:reply, :ok, state}
-
-      _aspect ->
-        {:reply, :error, state}
-    end
-  end
-
-  @impl true
-  def handle_call(:reset, _from, state) do
-    Genesis.ETS.clear(@objects_table)
-    Genesis.ETS.clear(@prefabs_table)
-    Genesis.ETS.clear(@events_table)
-    Genesis.ETS.clear(@aspects_table)
-
-    Enum.each(state.aspects_tables, &Genesis.ETS.drop/1)
-
-    {:reply, :ok, %{state | aspects_tables: []}}
-  end
-
-  defp initialize_aspect!(module) do
-    if not Genesis.Utils.aspect?(module),
-      do: raise("Invalid aspect #{inspect(module)}"),
-      else: module.init()
-  end
-
-  defp replace_aspect!(object, aspect) do
-    module = Map.fetch!(aspect, :__struct__)
-
-    :ets.match_delete(@objects_table, {object, %{__struct__: module}})
-    Genesis.ETS.put(@objects_table, object, aspect)
-    Genesis.ETS.put(module, object, aspect)
   end
 end

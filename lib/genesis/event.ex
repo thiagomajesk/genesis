@@ -1,29 +1,29 @@
 defmodule Genesis.Event do
   @moduledoc """
-  A struct representing an event that can be dispatched to objects.
+  A struct representing an event that can be dispatched to entities.
 
   Events are the primary mechanism for triggering behavior in Genesis.
-  When an event is sent to an object, it will be processed by the aspects
+  When an event is sent to an entity, it will be processed by the components
   attached that have been registered to handle that specific event.
 
   ## Fields
 
     * `:name` - The unique event identifier
-    * `:object` - The target object this event was sent to
-    * `:world` - The world where of the object was spawned in
-    * `:from` - The caller that sent the event to the object
+    * `:entity` - The target entity this event was sent to
+    * `:world` - The world where the entity was spawned in
+    * `:from` - The caller that sent the event to the entity
     * `:timestamp` - The event creation timestamp
     * `:args` - Additional event-specific data
     * `:handlers` - The list of modules that will handle the event
   """
-  @enforce_keys [:name, :world, :object, :from, :timestamp]
-  defstruct [:name, :world, :object, :from, :timestamp, args: %{}, handlers: []]
+  @enforce_keys [:name, :world, :entity, :from, :timestamp]
+  defstruct [:name, :world, :entity, :from, :timestamp, args: %{}, handlers: []]
 
   @doc """
   Processes a list of events by invoking their respective handlers in order.
   Each handler can choose to continue processing the event or halt further processing.
 
-  NOTE: This function is mostly used internally to process object events and calling it directly
+  NOTE: This function is mostly used internally to process entity events and calling it directly
   should be avoided unless there's a specific need to bypass the default event dispatching mechanism.
   """
   def process(event) when is_struct(event, __MODULE__) do

@@ -1,75 +1,51 @@
 defmodule Genesis.Query do
   @moduledoc """
-  Provides helper functions to query objects in the registry.
+  Provides query functions over registry metadata and components.
   """
 
   @doc """
-  Returns a list of objects that have all the aspects specified in the list.
+  Returns a list of entities that have all the components specified in the list.
 
   ## Examples
 
-      iex> Query.all_of([Aspect1, Aspect2])
-      [{1, [Aspect1, Aspect2]}, {2, [Aspect1, Aspect2]}]
+      iex> Genesis.Query.all_of(registry, [Component1, Component2])
+      [entity_1, entity_2]
   """
-  def all_of(modules) when is_list(modules) do
-    modules_lookup = MapSet.new(modules)
-
-    table = Genesis.Manager.table(:objects)
-
-    table
-    |> Genesis.ETS.group_keys()
-    |> apply_filter(:all, modules_lookup)
-    |> Enum.to_list()
-  end
+  def all_of(registry, component_types) when is_atom(registry) and is_list(component_types),
+    do: search(registry, all: component_types)
 
   @doc """
-  Returns a list of objects that have at least one of the aspects specified in the list.
+  Returns a list of entities that have at least one of the components specified in the list.
 
   ## Examples
 
-      iex> Query.any_of([Aspect1, Aspect2])
-      [{1, [Aspect1]}, {2, [Aspect2]}, {3, [Aspect1, Aspect2]}]
+      iex> Genesis.Query.any_of(registry, [Component1, Component2])
+      [entity_1, entity_2, entity_3]
   """
-  def any_of(modules) when is_list(modules) do
-    modules_lookup = MapSet.new(modules)
-
-    table = Genesis.Manager.table(:objects)
-
-    table
-    |> Genesis.ETS.group_keys()
-    |> apply_filter(:any, modules_lookup)
-    |> Enum.to_list()
-  end
+  def any_of(registry, component_types) when is_atom(registry) and is_list(component_types),
+    do: search(registry, any: component_types)
 
   @doc """
-  Returns a list of objects that do not have any of the aspects specified in the list.
+  Returns a list of entities that do not have any of the components specified in the list.
 
   ## Examples
 
-      iex> Query.none_of([Aspect1, Aspect2])
-      [{3, [Aspect3, Aspect4]}, {4, [Aspect4, Aspect5]}]
+      iex> Genesis.Query.none_of(registry, [Component1, Component2])
+      [entity_1, entity_2]
   """
-  def none_of(modules) when is_list(modules) do
-    modules_lookup = MapSet.new(modules)
-
-    table = Genesis.Manager.table(:objects)
-
-    table
-    |> Genesis.ETS.group_keys()
-    |> apply_filter(:none, modules_lookup)
-    |> Enum.to_list()
-  end
+  def none_of(registry, component_types) when is_atom(registry) and is_list(component_types),
+    do: search(registry, none: component_types)
 
   @doc """
-  Returns a list of objects that match the specified criteria.
-  The function allows grouping the behavior of `all_of/1`, `any_of/1`, and `none_of/1`.
+  Returns a list of entities that match the specified criteria.
 
-  ## Examples
+  ## Options
 
-      iex> Query.query(all: [Aspect1], any: [Aspect2], none: [Aspect3])
-      [{1, [Aspect1, Aspect2]}, {2, [Aspect1]}]
+    * `:all` - Matches entities that have all the specified components.
+    * `:any` - Matches entities that have at least one of the specified components.
+    * `:none` - Matches entities that do not have any of the specified components.
   """
-  def query(opts \\ []) do
+  def search(registry, opts) when is_atom(registry) and is_list(opts) do
     all = Keyword.get(opts, :all)
     any = Keyword.get(opts, :any)
     none = Keyword.get(opts, :none)
@@ -78,36 +54,124 @@ defmodule Genesis.Query do
     any_lookup = any && MapSet.new(any)
     none_lookup = none && MapSet.new(none)
 
-    table = Genesis.Manager.table(:objects)
-
-    table
-    |> Genesis.ETS.group_keys()
+    registry
+    |> Genesis.Registry.metadata()
     |> apply_filter(:all, all_lookup)
     |> apply_filter(:any, any_lookup)
     |> apply_filter(:none, none_lookup)
-    |> Enum.to_list()
+    |> Enum.map(fn {entity, _metadata} -> entity end)
+  end
+
+  @doc false
+  def match(registry, component_type, pairs) do
+    guards =
+      Enum.map(pairs, fn {key, value} ->
+        {:==, {:map_get, key, :"$2"}, value}
+      end)
+
+    match_spec = [
+      {
+        {:_, :"$1", component_type, :"$2"},
+        [{:is_map, :"$2"} | guards],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(registry, :components, match_spec)
+  end
+
+  @doc false
+  def at_least(registry, component_type, prop, value) do
+    match_spec = [
+      {
+        {:_, :"$1", component_type, :"$2"},
+        [{:is_map, :"$2"}, {:>=, {:map_get, prop, :"$2"}, value}],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(registry, :components, match_spec)
+  end
+
+  @doc false
+  def at_most(registry, component_type, prop, value) do
+    match_spec = [
+      {
+        {:_, :"$1", component_type, :"$2"},
+        [{:is_map, :"$2"}, {:"=<", {:map_get, prop, :"$2"}, value}],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(registry, :components, match_spec)
+  end
+
+  @doc false
+  def between(registry, component_type, prop, min, max) do
+    match_spec = [
+      {
+        {:_, :"$1", component_type, :"$2"},
+        [
+          {:is_map, :"$2"},
+          {:"=<", {:map_get, prop, :"$2"}, max},
+          {:>=, {:map_get, prop, :"$2"}, min}
+        ],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(registry, :components, match_spec)
+  end
+
+  @doc false
+  def all(registry, component_type) do
+    match_spec = [
+      {
+        {:_, :"$1", component_type, :"$2"},
+        [],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    Genesis.Registry.select(registry, :components, match_spec)
+  end
+
+  @doc false
+  def get(registry, component_type, entity, default) do
+    match_spec = [
+      {
+        {:_, entity, component_type, :"$1"},
+        [],
+        [:"$1"]
+      }
+    ]
+
+    case Genesis.Registry.select(registry, :components, match_spec) do
+      [component] -> component
+      [] -> default
+    end
   end
 
   defp apply_filter(stream, _filter, nil), do: stream
 
   defp apply_filter(stream, :all, lookup) do
-    Stream.filter(stream, fn {_object, aspects} ->
-      modules = Enum.map(aspects, & &1.__struct__)
-      MapSet.subset?(lookup, MapSet.new(modules))
+    Stream.filter(stream, fn {_entity, {_name, metadata}} ->
+      components = Map.get(metadata, :components, [])
+      MapSet.subset?(lookup, MapSet.new(components))
     end)
   end
 
   defp apply_filter(stream, :any, lookup) do
-    Stream.filter(stream, fn {_object, aspects} ->
-      modules = Enum.map(aspects, & &1.__struct__)
-      not MapSet.disjoint?(lookup, MapSet.new(modules))
+    Stream.filter(stream, fn {_entity, {_name, metadata}} ->
+      components = Map.get(metadata, :components, [])
+      not MapSet.disjoint?(lookup, MapSet.new(components))
     end)
   end
 
   defp apply_filter(stream, :none, lookup) do
-    Stream.filter(stream, fn {_object, aspects} ->
-      modules = Enum.map(aspects, & &1.__struct__)
-      MapSet.disjoint?(lookup, MapSet.new(modules))
+    Stream.filter(stream, fn {_entity, {_name, metadata}} ->
+      components = Map.get(metadata, :components, [])
+      MapSet.disjoint?(lookup, MapSet.new(components))
     end)
   end
 end

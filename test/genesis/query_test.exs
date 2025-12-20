@@ -1,88 +1,81 @@
 defmodule Genesis.QueryTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Genesis.Query
-  alias Genesis.World
-  alias Genesis.Manager
-  alias Genesis.Aspects.Health
-  alias Genesis.Aspects.Moniker
-  alias Genesis.Aspects.Position
+  alias Genesis.Registry
+
+  alias Genesis.Components.Health
+  alias Genesis.Components.Moniker
+  alias Genesis.Components.Position
+
+  @registry __MODULE__
 
   setup do
-    on_exit(fn -> Manager.reset() end)
-
-    aspects = [Health, Moniker, Position]
-    Enum.each(aspects, &Manager.register_aspect/1)
-
-    world = start_link_supervised!(World)
-
-    {:ok, world: world, aspects: aspects}
+    :ok = Registry.init(@registry)
+    on_exit(fn -> Registry.clear(@registry) end)
+    {:ok, registry: @registry}
   end
 
-  test "all_of/1", %{world: world} do
-    object_1 = World.create(world)
+  test "all_of", %{registry: registry} do
+    {:ok, entity_1} = Registry.create(registry)
 
-    Health.attach(object_1, current: 100)
-    Position.attach(object_1, x: 10, y: 20)
-    Moniker.attach(object_1, name: "Object")
+    Registry.emplace(registry, entity_1, %Health{current: 100})
+    Registry.emplace(registry, entity_1, %Position{x: 10, y: 20})
+    Registry.emplace(registry, entity_1, %Moniker{name: "Entity"})
 
-    object_2 = World.create(world)
+    {:ok, entity_2} = Registry.create(registry)
 
-    Health.attach(object_2, current: 50)
-    Position.attach(object_2, x: 5, y: 15)
+    Registry.emplace(registry, entity_2, %Health{current: 100})
+    Registry.emplace(registry, entity_2, %Position{x: 10, y: 20})
 
-    assert [{^object_1, _}] = Query.all_of([Health, Position, Moniker])
+    assert [^entity_1] = Query.all_of(registry, [Health, Position, Moniker])
   end
 
-  test "any_of/1", %{world: world} do
-    object_1 = World.create(world)
+  test "any_of", %{registry: registry} do
+    {:ok, entity_1} = Registry.create(registry)
 
-    Health.attach(object_1, current: 100)
-    Position.attach(object_1, x: 10, y: 20)
-    Moniker.attach(object_1, name: "Object")
+    Registry.emplace(registry, entity_1, %Health{current: 100})
+    Registry.emplace(registry, entity_1, %Position{x: 10, y: 20})
+    Registry.emplace(registry, entity_1, %Moniker{name: "Entity"})
 
-    object_2 = World.create(world)
+    {:ok, entity_2} = Registry.create(registry)
 
-    Position.attach(object_2, x: 5, y: 15)
+    Registry.emplace(registry, entity_2, %Position{x: 5, y: 15})
 
-    assert [{^object_1, _}] = Query.any_of([Health, Moniker])
+    assert [^entity_1] = Query.any_of(registry, [Health, Moniker])
   end
 
-  test "none_of/1", %{world: world} do
-    object_1 = World.create(world)
+  test "none_of", %{registry: registry} do
+    {:ok, entity_1} = Registry.create(registry)
 
-    Moniker.attach(object_1, name: "Object")
+    Registry.emplace(registry, entity_1, %Moniker{name: "Entity"})
 
-    object_2 = World.create(world)
+    {:ok, entity_2} = Registry.create(registry)
 
-    Health.attach(object_2, current: 100)
-    Position.attach(object_2, x: 10, y: 20)
+    Registry.emplace(registry, entity_2, %Health{current: 100})
+    Registry.emplace(registry, entity_2, %Position{x: 10, y: 20})
 
-    assert [{^object_1, _}] = Query.none_of([Health, Position])
+    assert [^entity_1] = Query.none_of(registry, [Health, Position])
   end
 
-  test "query/1", %{world: world} do
-    object_1 = World.create(world)
+  test "search", %{registry: registry} do
+    {:ok, entity_1} = Registry.create(registry)
 
-    Health.attach(object_1, current: 100)
-    Position.attach(object_1, x: 10, y: 20)
-    Moniker.attach(object_1, name: "Object")
+    Registry.emplace(registry, entity_1, %Health{current: 100})
+    Registry.emplace(registry, entity_1, %Position{x: 10, y: 20})
+    Registry.emplace(registry, entity_1, %Moniker{name: "Entity"})
 
-    object_2 = World.create(world)
+    {:ok, entity_2} = Registry.create(registry)
 
-    Health.attach(object_2, current: 50)
-    Position.attach(object_2, x: 5, y: 15)
+    Registry.emplace(registry, entity_2, %Health{current: 100})
+    Registry.emplace(registry, entity_2, %Position{x: 10, y: 20})
 
-    object_3 = World.create(world)
+    {:ok, entity_3} = Registry.create(registry)
 
-    Health.attach(object_3, current: 10)
-    Moniker.attach(object_3, name: "Object")
+    Registry.emplace(registry, entity_3, %Health{current: 100})
+    Registry.emplace(registry, entity_3, %Moniker{name: "Entity"})
 
-    assert [{^object_3, _}] =
-             Query.query(
-               all: [Health],
-               any: [Moniker],
-               none: [Position]
-             )
+    opts = [all: [Health], any: [Moniker], none: [Position]]
+    assert [^entity_3] = Query.search(registry, opts)
   end
 end
