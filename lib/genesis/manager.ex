@@ -21,7 +21,7 @@ defmodule Genesis.Manager do
   def components do
     match_spec = [
       {
-        {:_, :_, :"$1", %{module: :"$2"}},
+        {:_, :_, :"$1", %{type: :"$2"}},
         [],
         [{{:"$1", :"$2"}}]
       }
@@ -85,7 +85,7 @@ defmodule Genesis.Manager do
       |> Enum.map(&register_component!/1)
       |> Enum.reduce(%{}, fn {_entity, metadata}, lookup ->
         Enum.reduce(metadata.events, lookup, fn event, lookup ->
-          Map.update(lookup, event, [metadata.module], &[metadata.module | &1])
+          Map.update(lookup, event, [metadata.type], &[metadata.type | &1])
         end)
       end)
 
@@ -150,7 +150,7 @@ defmodule Genesis.Manager do
       nil ->
         registered_at = System.system_time()
         events = component_type.__component__(:events)
-        metadata = %{registered_at: registered_at, events: events, module: component_type}
+        metadata = %{registered_at: registered_at, events: events, type: component_type}
 
         case Genesis.Registry.create(:components, name: name, metadata: metadata) do
           {:ok, entity} ->

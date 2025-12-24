@@ -96,8 +96,8 @@ defmodule Genesis.Prefab do
 
     declared =
       Enum.map(components, fn {component, props} ->
-        module = Map.fetch!(components_lookup, component)
-        loaded = Code.ensure_loaded!(module)
+        component_type = Map.fetch!(components_lookup, component)
+        loaded = Code.ensure_loaded!(component_type)
         {loaded, {:merge, props}}
       end)
 
@@ -108,24 +108,24 @@ defmodule Genesis.Prefab do
       end)
 
     merged_components = merge_components(inherited, declared)
-    final_components = Enum.map(merged_components, fn {module, props} -> module.new(props) end)
+    final_components = Enum.map(merged_components, fn {component_type, props} -> component_type.new(props) end)
 
     %Prefab{name: name, extends: extends, components: final_components}
   end
 
   defp merge_components(inherited, declared) do
     Enum.reduce(inherited ++ declared, %{}, fn
-      {module, {:inherit, props}}, acc ->
-        Map.put(acc, module, props)
+      {component_type, {:inherit, props}}, acc ->
+        Map.put(acc, component_type, props)
 
-      {module, {:merge, props}}, acc ->
-        case Map.fetch(acc, module) do
+      {component_type, {:merge, props}}, acc ->
+        case Map.fetch(acc, component_type) do
           {:ok, existing} ->
             merged = Map.merge(existing, props)
-            Map.put(acc, module, merged)
+            Map.put(acc, component_type, merged)
 
           :error ->
-            Map.put(acc, module, props)
+            Map.put(acc, component_type, props)
         end
     end)
   end

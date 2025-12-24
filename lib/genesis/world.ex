@@ -101,13 +101,13 @@ defmodule Genesis.World do
 
       :map ->
         components = Genesis.Manager.components()
-        components_lookup = Map.new(components, fn {as, module} -> {module, as} end)
+        components_lookup = Map.new(components, fn {as, component_type} -> {component_type, as} end)
 
         Stream.map(stream, fn {entity, components} ->
           {entity,
-           Map.new(components, fn {module, component} ->
+           Map.new(components, fn {component_type, component} ->
              properties = Map.from_struct(component)
-             {Map.fetch!(components_lookup, module), properties}
+             {Map.fetch!(components_lookup, component_type), properties}
            end)}
         end)
     end
