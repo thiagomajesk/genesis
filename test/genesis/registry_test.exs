@@ -27,10 +27,11 @@ defmodule Genesis.RegistryTest do
     end
 
     test "creates an entity with metadata", %{registry: registry} do
-      metadata = %{created_at: DateTime.utc_now()}
+      created_by = self()
+      metadata = %{created_by: created_by}
       {:ok, entity} = Registry.create(registry, metadata: metadata)
 
-      assert {^entity, nil, ^metadata} = Registry.info(registry, entity)
+      assert {^entity, nil, %{created_by: ^created_by}} = Registry.info(registry, entity)
     end
   end
 

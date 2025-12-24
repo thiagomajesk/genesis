@@ -101,7 +101,9 @@ defmodule Genesis.World do
 
       :map ->
         components = Genesis.Manager.components()
-        components_lookup = Map.new(components, fn {as, component_type} -> {component_type, as} end)
+
+        components_lookup =
+          Map.new(components, fn {as, component_type} -> {component_type, as} end)
 
         Stream.map(stream, fn {entity, components} ->
           {entity,
@@ -164,7 +166,7 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call(:create, _from, state) do
-    entity = Genesis.Manager.entity!()
+    entity = Genesis.Manager.entity!(%{world: self()})
     entities = MapSet.put(state.entities, entity)
     {:reply, entity, %{state | entities: entities}}
   end
@@ -176,7 +178,7 @@ defmodule Genesis.World do
         {:reply, :noop, state}
 
       {prefab, _name, _metadata} ->
-        entity = Genesis.Manager.entity!()
+        entity = Genesis.Manager.entity!(%{world: self()})
 
         case Genesis.Registry.fetch(:prefabs, prefab) do
           nil ->
@@ -206,7 +208,7 @@ defmodule Genesis.World do
   def handle_call({:clone, entity}, _from, state) do
     components = fetch(entity)
 
-    clone = Genesis.Manager.entity!()
+    clone = Genesis.Manager.entity!(%{world: self()})
 
     case Genesis.Registry.assign(:entities, clone, components) do
       :ok ->

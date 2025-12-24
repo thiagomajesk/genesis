@@ -5,8 +5,8 @@ defmodule Genesis.Manager do
       iex> Genesis.Manager.entity!()
       #Reference<0.1234567890.1234567890.12345>
   """
-  def entity! do
-    case Genesis.Registry.create(:entities) do
+  def entity!(metadata \\ %{}) do
+    case Genesis.Registry.create(:entities, metadata: metadata) do
       {:ok, entity} -> entity
       {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
     end
@@ -107,10 +107,10 @@ defmodule Genesis.Manager do
         {:error, :already_registered}
 
       nil ->
-        registered_at = System.system_time()
-        metadata = %{registered_at: registered_at, extends: extends}
+        metadata = %{extends: extends}
+        options = [name: name, metadata: metadata]
 
-        with {:ok, entity} <- Genesis.Registry.create(:prefabs, name: name, metadata: metadata),
+        with {:ok, entity} <- Genesis.Registry.create(:prefabs, options),
              :ok <- Genesis.Registry.assign(:prefabs, entity, components) do
           {:ok, {entity, metadata, components}}
         end
@@ -148,9 +148,9 @@ defmodule Genesis.Manager do
         raise ArgumentError, "component #{inspect(name)} is already registered"
 
       nil ->
-        registered_at = System.system_time()
+        created_at = System.system_time()
         events = component_type.__component__(:events)
-        metadata = %{registered_at: registered_at, events: events, type: component_type}
+        metadata = %{created_at: created_at, events: events, type: component_type}
 
         case Genesis.Registry.create(:components, name: name, metadata: metadata) do
           {:ok, entity} ->

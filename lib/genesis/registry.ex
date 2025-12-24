@@ -250,7 +250,9 @@ defmodule Genesis.Registry do
     transaction(fn ->
       entity = make_ref()
       name = Keyword.get(opts, :name)
-      metadata = Keyword.get(opts, :metadata, %{})
+      custom_metadata = Keyword.get(opts, :metadata, %{})
+      default_metadata = %{created_at: System.system_time()}
+      metadata = Map.merge(default_metadata, custom_metadata)
 
       record = {table, entity, name, metadata}
       with :ok <- :mnesia.write(record), do: {:ok, entity}
