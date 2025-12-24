@@ -119,20 +119,70 @@ defmodule Genesis.Component do
       def update(entity, prop, fun) when is_atom(prop) and is_function(fun, 1),
         do: Genesis.Component.update(:entities, __MODULE__, entity, prop, fun)
 
+      @doc """
+      Returns all components of the given type.
+      Returns a list of tuples containing the entity and the component struct.
+
+      ## Examples
+
+          iex> Health.all()
+          [{1, %Health{current: 100}}, {2, %Health{current: 50}}]
+      """
       def all(), do: Genesis.Query.all(:entities, __MODULE__)
 
+      @doc """
+      Retrieves the component attached to an entity.
+      Returns the component struct if present or default.
+
+      ## Examples
+
+          iex> Health.get(1)
+          %Health{current: 100}
+      """
       def get(entity, default \\ nil),
         do: Genesis.Query.get(:entities, __MODULE__, entity, default)
 
+      @doc """
+      Returns all components that match the given properties.
+
+      ## Examples
+
+          iex> Moniker.match(name: "Tripida")
+          [{1, %Moniker{name: "Tripida"}}]
+      """
       def match(pairs),
         do: Genesis.Query.match(:entities, __MODULE__, pairs)
 
+      @doc """
+      Returns all components that have the given property with a value greater than or equal to the given minimum.
+
+      ## Examples
+
+          iex> Health.at_least(:current, 50)
+          [{1, %Health{current: 75}}]
+      """
       def at_least(prop, value) when is_prop(prop) and is_integer(value),
         do: Genesis.Query.at_least(:entities, __MODULE__, prop, value)
 
+      @doc """
+      Returns all components that have the given property with a value less than or equal to the given maximum.
+
+      ## Examples
+
+          iex> Health.at_most(:current, 50)
+          [{1, %Health{current: 25}}]
+      """
       def at_most(prop, value) when is_prop(prop) and is_integer(value),
         do: Genesis.Query.at_most(:entities, __MODULE__, prop, value)
 
+      @doc """
+      Returns all components that have the given property with a value between the given minimum and maximum (inclusive).
+
+      ## Examples
+
+          iex> Health.between(:current, 50, 100)
+          [{1, %Health{current: 75}}]
+      """
       def between(prop, min, max)
           when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
           do: Genesis.Query.between(:entities, __MODULE__, prop, min, max)

@@ -10,23 +10,73 @@ defmodule Genesis.Prefab do
 
   alias __MODULE__
 
+  @doc """
+  Returns all prefab components of the given type.
+  Returns a list of tuples containing the prefab and the component struct.
+
+  ## Examples
+
+      iex> Genesis.Prefab.all(Health)
+      [{prefab_1, %Health{current: 100}}, {prefab_2, %Health{current: 50}}]
+  """
   def all(component_type) when is_atom(component_type),
     do: Genesis.Query.all(:prefabs, component_type)
 
+  @doc """
+  Retrieves the component attached to a prefab.
+  Returns the component struct if present or `nil`.
+
+  ## Examples
+
+      iex> Genesis.Prefab.get(Health, prefab)
+      %Health{current: 100}
+  """
   def get(component_type, entity, default \\ nil) when is_atom(component_type),
     do: Genesis.Query.get(:prefabs, component_type, entity, default)
 
+  @doc """
+  Returns all prefab components that match the given properties.
+
+  ## Examples
+
+      iex> Genesis.Prefab.match(Moniker, name: "Tripida")
+      [{prefab, %Moniker{name: "Tripida"}}]
+  """
   def match(component_type, pairs) when is_atom(component_type),
     do: Genesis.Query.match(:prefabs, component_type, pairs)
 
+  @doc """
+  Returns all prefab components that have the given property with a value greater than or equal to the given minimum.
+
+  ## Examples
+
+      iex> Genesis.Prefab.at_least(Health, :current, 50)
+      [{prefab, %Health{current: 75}}]
+  """
   def at_least(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
       do: Genesis.Query.at_least(:prefabs, component_type, key, value)
 
+  @doc """
+  Returns all prefab components that have the given property with a value less than or equal to the given maximum.
+
+  ## Examples
+
+      iex> Genesis.Prefab.at_most(Health, :current, 50)
+      [{prefab, %Health{current: 25}}]
+  """
   def at_most(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
       do: Genesis.Query.at_most(:prefabs, component_type, key, value)
 
+  @doc """
+  Returns all prefab components that have the given property with a value between the given minimum and maximum (inclusive).
+
+  ## Examples
+
+      iex> Genesis.Prefab.between(Health, :current, 50, 100)
+      [{prefab, %Health{current: 75}}]
+  """
   def between(component_type, key, min, max)
       when is_atom(component_type) and is_atom(key) and
              is_integer(min) and is_integer(max) and min <= max,
