@@ -19,6 +19,16 @@ defmodule Genesis.Event do
   @enforce_keys [:name, :world, :entity, :from, :timestamp]
   defstruct [:name, :world, :entity, :from, :timestamp, args: %{}, handlers: []]
 
+  @type t :: %__MODULE__{
+          name: atom(),
+          world: pid(),
+          entity: reference(),
+          from: pid(),
+          timestamp: integer(),
+          args: map(),
+          handlers: list(module())
+        }
+
   @doc """
   Processes a list of events by invoking their respective handlers in order.
   Each handler can choose to continue processing the event or halt further processing.
