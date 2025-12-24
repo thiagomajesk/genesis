@@ -106,7 +106,7 @@ defmodule Genesis.RegistryTest do
     test "fails when component does not exist", %{registry: registry} do
       {:ok, entity} = Registry.create(registry)
 
-      assert {:error, :not_found} =
+      assert {:error, :component_not_found} =
                Registry.replace(registry, entity, %Position{x: 10, y: 20})
     end
   end
@@ -135,7 +135,7 @@ defmodule Genesis.RegistryTest do
     end
 
     test "fails to patch a non-existent entity", %{registry: registry} do
-      assert {:error, :not_found} = Registry.patch(registry, make_ref(), %{foo: "bar"})
+      assert {:error, :entity_not_found} = Registry.patch(registry, make_ref(), %{foo: "bar"})
     end
   end
 
@@ -151,12 +151,12 @@ defmodule Genesis.RegistryTest do
     test "fails to register a name for an entity that already has a name", %{registry: registry} do
       {:ok, entity} = Registry.create(registry, name: "Foo")
 
-      assert {:error, {:already_registered, "Foo"}} =
+      assert {:error, :already_registered} =
                Registry.register(registry, entity, "Bar")
     end
 
     test "fails to register a name for a non-existent entity", %{registry: registry} do
-      assert {:error, :not_found} = Registry.register(registry, make_ref(), "Foo")
+      assert {:error, :entity_not_found} = Registry.register(registry, make_ref(), "Foo")
     end
   end
 
@@ -242,7 +242,7 @@ defmodule Genesis.RegistryTest do
 
   describe "destroy" do
     test "fails to destroy a non-existent entity", %{registry: registry} do
-      assert {:error, :not_found} = Registry.destroy(registry, make_ref())
+      assert {:error, :entity_not_found} = Registry.destroy(registry, make_ref())
     end
 
     test "destroys an entity and removes all associated data", %{registry: registry} do

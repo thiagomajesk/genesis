@@ -1,7 +1,7 @@
 defmodule Genesis do
   @moduledoc """
   Genesis is a framework for building ECS-based games in Elixir.
-  It provides a flexible and efficient way to manage game entities, their components, and the events that drive game logic.
+  It provides a flexible way to manage game entities, components, and event-driven game logic.
 
   ## Entities
   Entities are unique references that can have components attached to them, which define their behavior and state.
@@ -25,17 +25,17 @@ defmodule Genesis do
   Each game world runs a GenStage pipeline to handle event dispatching and processing efficiently.
   This pipeline is composed of three core components:
 
-  **Herald (Producer)** - Receives Genesis Events from the world and distributes them across multiple partitions
+  **Herald (Producer)** - Receives events from the world and distributes them across multiple partitions
   using consistent hashing based on the target entity. This ensures all events for the same entity
   always go to the same partition, enabling ordered processing.
 
   **Envoy (Producer-Consumer)** - One per partition. Maintains separate queues for each entity within
-  its partition. When Genesis Events arrive for an entity, they are queued. The Envoy batches Genesis Events
+  its partition. When events arrive for an entity, they are queued. The Envoy batches events
   for the same entity together and emits them as a single GenStage event payload to ensure only one
   worker processes a given entity at a time, preventing race conditions.
 
   **Scribe (Consumer)** - Supervises worker processes that execute the actual event processing. Each worker
-  receives a batch of Genesis Events for a single entity, processes them sequentially, then notifies the
+  receives a batch of events for a single entity, processes them sequentially, then notifies the
   Envoy when finished so more events can be dispatched for that entity.
 
   The topology looks like the following (with 2 partitions):
@@ -84,6 +84,8 @@ defmodule Genesis do
   @impl true
   def start(_type, _args) do
     :ok = Genesis.Manager.init()
-    Supervisor.start_link([], strategy: :one_for_one, name: Genesis.Supervisor)
+
+    children = [{Task.Supervisor, name: Genesis.TaskSupervisor}]
+    Supervisor.start_link(children, strategy: :one_for_one, name: Genesis.Supervisor)
   end
 end

@@ -126,7 +126,7 @@ defmodule Genesis.Component do
       ## Examples
 
           iex> Health.all()
-          [{1, %Health{current: 100}}, {2, %Health{current: 50}}]
+          [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
       """
       def all(), do: Genesis.Query.__all__(:entities, __MODULE__)
 
@@ -136,7 +136,7 @@ defmodule Genesis.Component do
 
       ## Examples
 
-          iex> Health.get(1)
+          iex> Health.get(entity_1)
           %Health{current: 100}
       """
       def get(entity, default \\ nil),
@@ -148,7 +148,7 @@ defmodule Genesis.Component do
       ## Examples
 
           iex> Moniker.match(name: "Tripida")
-          [{1, %Moniker{name: "Tripida"}}]
+          [{entity_1, %Moniker{name: "Tripida"}}]
       """
       def match(pairs),
         do: Genesis.Query.__match__(:entities, __MODULE__, pairs)
@@ -159,7 +159,7 @@ defmodule Genesis.Component do
       ## Examples
 
           iex> Health.at_least(:current, 50)
-          [{1, %Health{current: 75}}]
+          [{entity_1, %Health{current: 75}}]
       """
       def at_least(prop, value) when is_prop(prop) and is_integer(value),
         do: Genesis.Query.__at_least__(:entities, __MODULE__, prop, value)
@@ -170,7 +170,7 @@ defmodule Genesis.Component do
       ## Examples
 
           iex> Health.at_most(:current, 50)
-          [{1, %Health{current: 25}}]
+          [{entity_1, %Health{current: 25}}]
       """
       def at_most(prop, value) when is_prop(prop) and is_integer(value),
         do: Genesis.Query.__at_most__(:entities, __MODULE__, prop, value)
@@ -181,7 +181,7 @@ defmodule Genesis.Component do
       ## Examples
 
           iex> Health.between(:current, 50, 100)
-          [{1, %Health{current: 75}}]
+          [{entity_1, %Health{current: 75}}]
       """
       def between(prop, min, max)
           when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
@@ -211,8 +211,7 @@ defmodule Genesis.Component do
       nil ->
         case Genesis.Registry.emplace(registry, entity, component) do
           :ok ->
-            component_type.on_hook(:attached, entity, component)
-            :ok
+            invoke_hook(component_type, :attached, entity, component)
 
           {:error, _reason} ->
             :error
@@ -229,8 +228,7 @@ defmodule Genesis.Component do
       component ->
         case Genesis.Registry.erase(registry, entity, component_type) do
           :ok ->
-            component_type.on_hook(:removed, entity, component)
-            :ok
+            invoke_hook(component_type, :removed, entity, component)
 
           {:error, _reason} ->
             :error
@@ -250,8 +248,7 @@ defmodule Genesis.Component do
 
         case Genesis.Registry.replace(registry, entity, updated) do
           :ok ->
-            component_type.on_hook(:updated, entity, updated)
-            :ok
+            invoke_hook(component_type, :updated, entity, updated)
 
           {:error, _reason} ->
             :error
@@ -270,8 +267,7 @@ defmodule Genesis.Component do
 
         case Genesis.Registry.replace(registry, entity, updated) do
           :ok ->
-            component_type.on_hook(:updated, entity, updated)
-            :ok
+            invoke_hook(component_type, :updated, entity, updated)
 
           {:error, _reason} ->
             :error
@@ -280,5 +276,12 @@ defmodule Genesis.Component do
       _component ->
         :error
     end
+  end
+
+  defp invoke_hook(component_type, hook, entity, component) do
+    sup = Genesis.TaskSupervisor
+    args = [hook, entity, component]
+    task = Task.Supervisor.async_nolink(sup, component_type, :on_hook, args)
+    with _result <- Task.await(task), do: :ok
   end
 end

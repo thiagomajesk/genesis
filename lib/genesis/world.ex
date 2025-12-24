@@ -223,9 +223,14 @@ defmodule Genesis.World do
   @impl true
   def handle_call({:destroy, entity}, _from, state) do
     if MapSet.member?(state.entities, entity) do
-      Genesis.Registry.erase(:entities, entity)
-      entities = MapSet.delete(state.entities, entity)
-      {:reply, :ok, %{state | entities: entities}}
+      case Genesis.Registry.erase(:entities, entity) do
+        :ok ->
+          entities = MapSet.delete(state.entities, entity)
+          {:reply, :ok, %{state | entities: entities}}
+
+        {:error, _reason} ->
+          {:reply, :noop, state}
+      end
     else
       {:reply, :noop, state}
     end

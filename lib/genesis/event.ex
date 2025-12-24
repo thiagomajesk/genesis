@@ -33,8 +33,8 @@ defmodule Genesis.Event do
   Processes a list of events by invoking their respective handlers in order.
   Each handler can choose to continue processing the event or halt further processing.
 
-  NOTE: This function is mostly used internally to process entity events and calling it directly
-  should be avoided unless there's a specific need to bypass the default event dispatching mechanism.
+  NOTE: This function is mostly used internally to process entity events. Calling it directly
+  should be avoided unless you need to bypass the default event dispatching mechanism.
   """
   def process(event) when is_struct(event, __MODULE__) do
     Enum.reduce_while(event.handlers, event, fn module, event ->

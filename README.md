@@ -106,7 +106,7 @@ This example demonstrates the core Genesis workflow: defining components with be
 
 ## Special Thanks ❤️
 
-A big thanks to both Brian Bucklew and Thomas Biskup for the inspiring talks. The Caves of Qud modding guides in particular was a great resource to see what this architecture would be capable of.
+A big thanks to both Brian Bucklew and Thomas Biskup for the inspiring talks. The Caves of Qud modding guides in particular were a great resource to see what this architecture would be capable of.
 
 Special thanks to other ECS libraries that influenced the development of Genesis:
 

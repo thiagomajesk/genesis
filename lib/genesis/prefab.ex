@@ -17,7 +17,7 @@ defmodule Genesis.Prefab do
   ## Examples
 
       iex> Genesis.Prefab.all(Health)
-      [{prefab_1, %Health{current: 100}}, {prefab_2, %Health{current: 50}}]
+      [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
   """
   def all(component_type) when is_atom(component_type),
     do: Genesis.Query.__all__(:prefabs, component_type)
@@ -28,7 +28,7 @@ defmodule Genesis.Prefab do
 
   ## Examples
 
-      iex> Genesis.Prefab.get(Health, prefab)
+      iex> Genesis.Prefab.get(Health, entity_1)
       %Health{current: 100}
   """
   def get(component_type, entity, default \\ nil) when is_atom(component_type),
@@ -40,7 +40,7 @@ defmodule Genesis.Prefab do
   ## Examples
 
       iex> Genesis.Prefab.match(Moniker, name: "Tripida")
-      [{prefab, %Moniker{name: "Tripida"}}]
+      [{entity_1, %Moniker{name: "Tripida"}}]
   """
   def match(component_type, pairs) when is_atom(component_type),
     do: Genesis.Query.__match__(:prefabs, component_type, pairs)
@@ -51,7 +51,7 @@ defmodule Genesis.Prefab do
   ## Examples
 
       iex> Genesis.Prefab.at_least(Health, :current, 50)
-      [{prefab, %Health{current: 75}}]
+      [{entity_1, %Health{current: 75}}]
   """
   def at_least(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
@@ -63,7 +63,7 @@ defmodule Genesis.Prefab do
   ## Examples
 
       iex> Genesis.Prefab.at_most(Health, :current, 50)
-      [{prefab, %Health{current: 25}}]
+      [{entity_1, %Health{current: 25}}]
   """
   def at_most(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
@@ -75,7 +75,7 @@ defmodule Genesis.Prefab do
   ## Examples
 
       iex> Genesis.Prefab.between(Health, :current, 50, 100)
-      [{prefab, %Health{current: 75}}]
+      [{entity_1, %Health{current: 75}}]
   """
   def between(component_type, key, min, max)
       when is_atom(component_type) and is_atom(key) and
@@ -108,7 +108,9 @@ defmodule Genesis.Prefab do
       end)
 
     merged_components = merge_components(inherited, declared)
-    final_components = Enum.map(merged_components, fn {component_type, props} -> component_type.new(props) end)
+
+    final_components =
+      Enum.map(merged_components, fn {component_type, props} -> component_type.new(props) end)
 
     %Prefab{name: name, extends: extends, components: final_components}
   end

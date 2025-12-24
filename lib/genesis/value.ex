@@ -18,12 +18,12 @@ defmodule Genesis.Value do
   Because we don't provide an exhaustive list of types, `:any` can be used as an wildcard where
   the other types don't seem appropriate. However, it should be used sparingly as it doesn't provide
   any typing or casting guarantees. Keep in mind that whenever possible, using scalar types should
-  still be prefered as it enforces good ECS design practices.
+  still be preferred as it enforces good ECS design practices.
 
   For instance, you might be tempted to use `:any` to model complex relationships between entities,
   such as one-to-many associations, by storing complex data structures in a single property. A more idiomatic
-  approach would be to create separate entities and link them through components instead. This not only adheres
-  to ECS principles but also enhances maintainability and scalability and extensibility of your architecture.
+  approach would be to create separate entities and link them through components instead. This adheres
+  to ECS principles and enhances the maintainability, scalability, and extensibility of your architecture.
 
   ## Examples
 
@@ -311,13 +311,6 @@ defmodule Genesis.Value do
                 "invalid value #{inspect(value)} given to property #{inspect(name)} of type #{inspect(type)}"
         end
 
-        values = Keyword.get(opts, :values)
-
-        if not is_nil(values) and not Enum.member?(values, value) do
-          raise ArgumentError,
-                "value #{inspect(value)} for property #{inspect(name)} is not allowed, must be one of #{inspect(values)}"
-        end
-
         min = Keyword.get(opts, :min)
 
         if not is_nil(min) and value < min do
@@ -350,11 +343,23 @@ defmodule Genesis.Value do
     value = Map.get(attrs, to_string(name))
     atomize? = type == :atom and is_binary(value)
 
-    if atomize? and not Keyword.has_key?(opts, :values) do
+    values = Keyword.get(opts, :values)
+
+    if atomize? and values == [] do
       raise ArgumentError,
             "The prop #{inspect(name)} needs to provide values when casting strings"
     end
 
+    # In case of atom props, we append string versions of the atoms to the allowed values
+    stringified = Stream.map(values, &to_string/1)
+    allowed_values = if atomize?, do: Enum.concat(values, stringified), else: values
+
+    if not is_nil(values) and value not in allowed_values do
+      raise ArgumentError,
+            "value #{inspect(value)} for property #{inspect(name)} is not allowed, must be one of #{inspect(allowed_values)}"
+    end
+
+    # Finally, if not exceptions were raised, we can return the value (possibly atomized)
     if atomize?, do: String.to_existing_atom(value), else: value
   end
 end

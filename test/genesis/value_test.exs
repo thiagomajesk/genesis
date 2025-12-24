@@ -202,7 +202,7 @@ defmodule Genesis.ValueTest do
       assert %{^name => :on} = Genesis.Value.__cast__(%{name => "on"}, props)
 
       error_msg =
-        ~s|value :invalid for property #{inspect(name)} is not allowed, must be one of [:on, :off]|
+        ~s|value "invalid" for property #{inspect(name)} is not allowed, must be one of [:on, :off, \"on\", \"off\"]|
 
       assert_raise ArgumentError, error_msg, fn ->
         Genesis.Value.__cast__(%{name => "invalid"}, props)

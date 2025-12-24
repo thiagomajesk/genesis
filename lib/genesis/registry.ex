@@ -294,7 +294,7 @@ defmodule Genesis.Registry do
     transaction(fn ->
       case :mnesia.index_match_object({table, entity, type, :_}, :type) do
         [] ->
-          {:error, :not_found}
+          {:error, :component_not_found}
 
         [{^table, ^entity, ^type, old_component}] ->
           :mnesia.delete_object({table, entity, type, old_component})
@@ -325,13 +325,13 @@ defmodule Genesis.Registry do
     transaction(fn ->
       case :mnesia.read(table, entity) do
         [] ->
-          {:error, :not_found}
+          {:error, :entity_not_found}
 
         [{_table, ^entity, nil, metadata}] ->
           :mnesia.write({table, entity, name, metadata})
 
-        [{_table, ^entity, name, _metadata}] ->
-          {:error, {:already_registered, name}}
+        [{_table, ^entity, _name, _metadata}] ->
+          {:error, :already_registered}
       end
     end)
   end
@@ -343,7 +343,7 @@ defmodule Genesis.Registry do
     transaction(fn ->
       case :mnesia.read(metadata_table, entity) do
         [] ->
-          {:error, :not_found}
+          {:error, :entity_not_found}
 
         [{_table, ^entity, name, metadata}] ->
           :mnesia.delete({components_table, entity})
@@ -388,7 +388,7 @@ defmodule Genesis.Registry do
     transaction(fn ->
       case :mnesia.read(table, entity) do
         [] ->
-          {:error, :not_found}
+          {:error, :entity_not_found}
 
         [{_table, ^entity, name, _metadata}] ->
           :mnesia.write({table, entity, name, new_metadata})
@@ -403,7 +403,7 @@ defmodule Genesis.Registry do
     transaction(fn ->
       case :mnesia.read(metadata_table, entity) do
         [] ->
-          {:error, :not_found}
+          {:error, :entity_not_found}
 
         [{_table, ^entity, _name, _metadata}] ->
           with :ok <- :mnesia.delete({metadata_table, entity}),
@@ -519,8 +519,8 @@ defmodule Genesis.Registry do
   defp emplace_many(components_table, entity, components) do
     Enum.map(components, fn component ->
       type = Map.fetch!(component, :__struct__)
-      :mnesia.write({components_table, entity, type, component})
-      type
+      record = {components_table, entity, type, component}
+      with :ok <- :mnesia.write(record), do: type
     end)
   end
 end
