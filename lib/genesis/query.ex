@@ -63,7 +63,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def match(registry, component_type, pairs) do
+  def __match__(registry, component_type, pairs) do
     guards =
       Enum.map(pairs, fn {key, value} ->
         {:==, {:map_get, key, :"$2"}, value}
@@ -81,7 +81,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def at_least(registry, component_type, prop, value) do
+  def __at_least__(registry, component_type, prop, value) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
@@ -94,7 +94,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def at_most(registry, component_type, prop, value) do
+  def __at_most__(registry, component_type, prop, value) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
@@ -107,7 +107,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def between(registry, component_type, prop, min, max) do
+  def __between__(registry, component_type, prop, min, max) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
@@ -124,7 +124,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def all(registry, component_type) do
+  def __all__(registry, component_type) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
@@ -137,7 +137,7 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def get(registry, component_type, entity, default) do
+  def __get__(registry, component_type, entity, default) do
     match_spec = [
       {
         {:_, entity, component_type, :"$1"},

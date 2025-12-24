@@ -105,19 +105,19 @@ defmodule Genesis.Component do
         do: attach(entity, __MODULE__.new(props))
 
       def attach(entity, %{__struct__: __MODULE__} = component),
-        do: Genesis.Component.attach(:entities, __MODULE__, entity, component)
+        do: Genesis.Component.__attach__(:entities, __MODULE__, entity, component)
 
       def remove(entity),
-        do: Genesis.Component.remove(:entities, __MODULE__, entity)
+        do: Genesis.Component.__remove__(:entities, __MODULE__, entity)
 
       def update(entity, props) when is_props(props),
-        do: Genesis.Component.update(:entities, __MODULE__, entity, props)
+        do: Genesis.Component.__update__(:entities, __MODULE__, entity, props)
 
       # We don't use a guard in this case because the return value has better semantics.
       # The query functions on the other hand need it because returning empty would have
       # two meanings: a) Invalid prop that will never match b) No entity actually matched.
       def update(entity, prop, fun) when is_atom(prop) and is_function(fun, 1),
-        do: Genesis.Component.update(:entities, __MODULE__, entity, prop, fun)
+        do: Genesis.Component.__update__(:entities, __MODULE__, entity, prop, fun)
 
       @doc """
       Returns all components of the given type.
@@ -128,7 +128,7 @@ defmodule Genesis.Component do
           iex> Health.all()
           [{1, %Health{current: 100}}, {2, %Health{current: 50}}]
       """
-      def all(), do: Genesis.Query.all(:entities, __MODULE__)
+      def all(), do: Genesis.Query.__all__(:entities, __MODULE__)
 
       @doc """
       Retrieves the component attached to an entity.
@@ -140,7 +140,7 @@ defmodule Genesis.Component do
           %Health{current: 100}
       """
       def get(entity, default \\ nil),
-        do: Genesis.Query.get(:entities, __MODULE__, entity, default)
+        do: Genesis.Query.__get__(:entities, __MODULE__, entity, default)
 
       @doc """
       Returns all components that match the given properties.
@@ -151,7 +151,7 @@ defmodule Genesis.Component do
           [{1, %Moniker{name: "Tripida"}}]
       """
       def match(pairs),
-        do: Genesis.Query.match(:entities, __MODULE__, pairs)
+        do: Genesis.Query.__match__(:entities, __MODULE__, pairs)
 
       @doc """
       Returns all components that have the given property with a value greater than or equal to the given minimum.
@@ -162,7 +162,7 @@ defmodule Genesis.Component do
           [{1, %Health{current: 75}}]
       """
       def at_least(prop, value) when is_prop(prop) and is_integer(value),
-        do: Genesis.Query.at_least(:entities, __MODULE__, prop, value)
+        do: Genesis.Query.__at_least__(:entities, __MODULE__, prop, value)
 
       @doc """
       Returns all components that have the given property with a value less than or equal to the given maximum.
@@ -173,7 +173,7 @@ defmodule Genesis.Component do
           [{1, %Health{current: 25}}]
       """
       def at_most(prop, value) when is_prop(prop) and is_integer(value),
-        do: Genesis.Query.at_most(:entities, __MODULE__, prop, value)
+        do: Genesis.Query.__at_most__(:entities, __MODULE__, prop, value)
 
       @doc """
       Returns all components that have the given property with a value between the given minimum and maximum (inclusive).
@@ -185,7 +185,7 @@ defmodule Genesis.Component do
       """
       def between(prop, min, max)
           when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
-          do: Genesis.Query.between(:entities, __MODULE__, prop, min, max)
+          do: Genesis.Query.__between__(:entities, __MODULE__, prop, min, max)
 
       if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 2}) do
         raise CompileError,
@@ -200,7 +200,7 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def attach(registry, component_type, entity, component) do
+  def __attach__(registry, component_type, entity, component) do
     case component_type.get(entity) do
       ^component ->
         :noop
@@ -221,7 +221,7 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def remove(registry, component_type, entity) do
+  def __remove__(registry, component_type, entity) do
     case component_type.get(entity) do
       nil ->
         :noop
@@ -239,7 +239,7 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def update(registry, component_type, entity, properties) do
+  def __update__(registry, component_type, entity, properties) do
     case component_type.get(entity) do
       nil ->
         :noop
@@ -260,7 +260,7 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def update(registry, component_type, entity, property, fun) do
+  def __update__(registry, component_type, entity, property, fun) do
     case component_type.get(entity) do
       nil ->
         :noop

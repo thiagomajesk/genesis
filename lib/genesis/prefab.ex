@@ -20,7 +20,7 @@ defmodule Genesis.Prefab do
       [{prefab_1, %Health{current: 100}}, {prefab_2, %Health{current: 50}}]
   """
   def all(component_type) when is_atom(component_type),
-    do: Genesis.Query.all(:prefabs, component_type)
+    do: Genesis.Query.__all__(:prefabs, component_type)
 
   @doc """
   Retrieves the component attached to a prefab.
@@ -32,7 +32,7 @@ defmodule Genesis.Prefab do
       %Health{current: 100}
   """
   def get(component_type, entity, default \\ nil) when is_atom(component_type),
-    do: Genesis.Query.get(:prefabs, component_type, entity, default)
+    do: Genesis.Query.__get__(:prefabs, component_type, entity, default)
 
   @doc """
   Returns all prefab components that match the given properties.
@@ -43,7 +43,7 @@ defmodule Genesis.Prefab do
       [{prefab, %Moniker{name: "Tripida"}}]
   """
   def match(component_type, pairs) when is_atom(component_type),
-    do: Genesis.Query.match(:prefabs, component_type, pairs)
+    do: Genesis.Query.__match__(:prefabs, component_type, pairs)
 
   @doc """
   Returns all prefab components that have the given property with a value greater than or equal to the given minimum.
@@ -55,7 +55,7 @@ defmodule Genesis.Prefab do
   """
   def at_least(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
-      do: Genesis.Query.at_least(:prefabs, component_type, key, value)
+      do: Genesis.Query.__at_least__(:prefabs, component_type, key, value)
 
   @doc """
   Returns all prefab components that have the given property with a value less than or equal to the given maximum.
@@ -67,7 +67,7 @@ defmodule Genesis.Prefab do
   """
   def at_most(component_type, key, value)
       when is_atom(component_type) and is_atom(key) and is_integer(value),
-      do: Genesis.Query.at_most(:prefabs, component_type, key, value)
+      do: Genesis.Query.__at_most__(:prefabs, component_type, key, value)
 
   @doc """
   Returns all prefab components that have the given property with a value between the given minimum and maximum (inclusive).
@@ -80,7 +80,7 @@ defmodule Genesis.Prefab do
   def between(component_type, key, min, max)
       when is_atom(component_type) and is_atom(key) and
              is_integer(min) and is_integer(max) and min <= max,
-      do: Genesis.Query.between(:prefabs, component_type, key, min, max)
+      do: Genesis.Query.__between__(:prefabs, component_type, key, min, max)
 
   @doc false
   def load(attrs, opts \\ []) do
