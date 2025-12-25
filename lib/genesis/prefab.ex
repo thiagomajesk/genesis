@@ -87,34 +87,40 @@ defmodule Genesis.Prefab do
     registered_prefabs = Keyword.get(opts, :prefabs, [])
     registered_components = Keyword.get(opts, :components, [])
 
-    prefabs_lookup = Map.new(registered_prefabs)
-    components_lookup = Map.new(registered_components)
-
     name = Map.fetch!(attrs, :name)
     extends = Map.get(attrs, :extends, [])
     components = Map.fetch!(attrs, :components)
 
-    declared =
-      Enum.map(components, fn {component_alias, props} ->
-        component_type = fetch_component_type!(components_lookup, component_alias, name)
-        {component_type, {:merge, props}}
-      end)
+    prefabs_lookup = Map.new(registered_prefabs)
+    components_lookup = Map.new(registered_components)
 
-    inherited =
-      Enum.flat_map(extends, fn parent_name ->
-        components = fetch_components!(prefabs_lookup, parent_name, name)
-        Enum.map(components, &{&1.__struct__, {:inherit, Map.from_struct(&1)}})
-      end)
+    declared = fetch_declared_components(components_lookup, components, name)
+    inherited = fetch_inherited_components(prefabs_lookup, extends, name)
+    merged_components = merge_components(Map.new(inherited), Map.new(declared))
 
-    merged_components = merge_components(inherited, declared)
-
-    final_components =
-      Enum.map(merged_components, fn {component_type, props} -> component_type.new(props) end)
-
-    %Prefab{name: name, extends: extends, components: final_components}
+    %Prefab{name: name, extends: extends, components: merged_components}
   end
 
-  defp fetch_component_type!(components_lookup, component_alias, prefab_name) do
+  defp fetch_declared_components(components_lookup, components, prefab_name) do
+    Enum.map(components, fn {component_alias, props} ->
+      component_type = ensure_loaded!(components_lookup, component_alias, prefab_name)
+      {component_type, props}
+    end)
+  end
+
+  defp fetch_inherited_components(prefabs_lookup, extends, prefab_name) do
+    Enum.flat_map(extends, fn parent_name ->
+      components = fetch_components!(prefabs_lookup, parent_name, prefab_name)
+      Enum.map(components, &{&1.__struct__, Map.from_struct(&1)})
+    end)
+  end
+
+  defp merge_components(inherited, declared) do
+    merged = Map.merge(inherited, declared, fn _k, v1, v2 -> Map.merge(v1, v2) end)
+    Enum.map(merged, fn {component_type, props} -> component_type.new(props) end)
+  end
+
+  defp ensure_loaded!(components_lookup, component_alias, prefab_name) do
     case Map.fetch(components_lookup, component_alias) do
       {:ok, type} ->
         Code.ensure_loaded!(type)
@@ -135,22 +141,5 @@ defmodule Genesis.Prefab do
         raise ArgumentError,
               "prefab #{inspect(child_name)} extends #{inspect(parent_name)} but #{inspect(parent_name)} is not registered"
     end
-  end
-
-  defp merge_components(inherited, declared) do
-    Enum.reduce(inherited ++ declared, %{}, fn
-      {component_type, {:inherit, props}}, acc ->
-        Map.put(acc, component_type, props)
-
-      {component_type, {:merge, props}}, acc ->
-        case Map.fetch(acc, component_type) do
-          {:ok, existing} ->
-            merged = Map.merge(existing, props)
-            Map.put(acc, component_type, merged)
-
-          :error ->
-            Map.put(acc, component_type, props)
-        end
-    end)
   end
 end
