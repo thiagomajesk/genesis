@@ -50,9 +50,9 @@ defmodule Genesis.Value do
   end
 
   @doc false
-  def __cast__(_attrs, []), do: %{}
+  def cast(_attrs, []), do: %{}
 
-  def __cast__(attrs, props) do
+  def cast(attrs, props) do
     attrs
     |> normalize()
     |> merge_defaults(props)

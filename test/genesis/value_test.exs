@@ -128,8 +128,8 @@ defmodule Genesis.ValueTest do
       props = [{name, :string, []}]
 
       attrs = %{:unkown => "value", name => "value"}
-      assert %{^name => "value"} = Genesis.Value.__cast__(attrs, props)
-      refute Map.has_key?(Genesis.Value.__cast__(attrs, props), :unkown)
+      assert %{^name => "value"} = Genesis.Value.cast(attrs, props)
+      refute Map.has_key?(Genesis.Value.cast(attrs, props), :unkown)
     end
 
     test "considers whitespace-only strings as empty for required string properties" do
@@ -140,43 +140,43 @@ defmodule Genesis.ValueTest do
 
       # Empty string and whitespace-only strings should be considered empty
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => ""}, props)
+        Genesis.Value.cast(%{name => ""}, props)
       end
 
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => "   "}, props)
+        Genesis.Value.cast(%{name => "   "}, props)
       end
 
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => "\t\n"}, props)
+        Genesis.Value.cast(%{name => "\t\n"}, props)
       end
 
       # Non-empty string should work fine
-      assert %{^name => "valid value"} = Genesis.Value.__cast__(%{name => "valid value"}, props)
+      assert %{^name => "valid value"} = Genesis.Value.cast(%{name => "valid value"}, props)
     end
 
     test "integer min option" do
       name = :test_integer
       props = [{name, :integer, [min: 10, max: 20]}]
 
-      assert %{^name => 10} = Genesis.Value.__cast__(%{name => 10}, props)
+      assert %{^name => 10} = Genesis.Value.cast(%{name => 10}, props)
 
       error_msg = "value 9 for property #{inspect(name)} is less than the minimum allowed 10"
-      assert_raise ArgumentError, error_msg, fn -> Genesis.Value.__cast__(%{name => 9}, props) end
+      assert_raise ArgumentError, error_msg, fn -> Genesis.Value.cast(%{name => 9}, props) end
     end
 
     test "integer max option" do
       name = :test_integer
       props = [{name, :integer, [min: 10, max: 20]}]
 
-      assert %{^name => 10} = Genesis.Value.__cast__(%{name => 10}, props)
+      assert %{^name => 10} = Genesis.Value.cast(%{name => 10}, props)
 
-      assert %{^name => 20} = Genesis.Value.__cast__(%{name => 20}, props)
+      assert %{^name => 20} = Genesis.Value.cast(%{name => 20}, props)
 
       error_msg = "value 21 for property #{inspect(name)} is greater than the maximum allowed 20"
 
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => 21}, props)
+        Genesis.Value.cast(%{name => 21}, props)
       end
     end
 
@@ -184,13 +184,13 @@ defmodule Genesis.ValueTest do
       name = :test_string
       props = [{name, :string, [format: ~r/^\d+$/]}]
 
-      assert %{^name => "123"} = Genesis.Value.__cast__(%{name => "123"}, props)
+      assert %{^name => "123"} = Genesis.Value.cast(%{name => "123"}, props)
 
       error_msg =
         ~s|value "invalid" for property #{inspect(name)} does not match the required format ~r/^\\d+$/|
 
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => "invalid"}, props)
+        Genesis.Value.cast(%{name => "invalid"}, props)
       end
     end
 
@@ -198,14 +198,14 @@ defmodule Genesis.ValueTest do
       name = :test_atom
       props = [{name, :atom, [values: [:on, :off]]}]
 
-      assert %{^name => :on} = Genesis.Value.__cast__(%{name => :on}, props)
-      assert %{^name => :on} = Genesis.Value.__cast__(%{name => "on"}, props)
+      assert %{^name => :on} = Genesis.Value.cast(%{name => :on}, props)
+      assert %{^name => :on} = Genesis.Value.cast(%{name => "on"}, props)
 
       error_msg =
         ~s|value "invalid" for property #{inspect(name)} is not allowed, must be one of [:on, :off, \"on\", \"off\"]|
 
       assert_raise ArgumentError, error_msg, fn ->
-        Genesis.Value.__cast__(%{name => "invalid"}, props)
+        Genesis.Value.cast(%{name => "invalid"}, props)
       end
     end
   end
@@ -219,7 +219,7 @@ defmodule Genesis.ValueTest do
         value = fixture(type)
         props = [{name, type, [required: true]}]
 
-        assert %{^name => ^value} = Genesis.Value.__cast__(%{name => value}, props)
+        assert %{^name => ^value} = Genesis.Value.cast(%{name => value}, props)
       end
 
       test "handles required properties" do
@@ -229,12 +229,12 @@ defmodule Genesis.ValueTest do
         value = fixture(type)
         props = [{name, type, [required: true]}]
 
-        assert %{^name => ^value} = Genesis.Value.__cast__(%{name => value}, props)
+        assert %{^name => ^value} = Genesis.Value.cast(%{name => value}, props)
 
         error_msg = "property #{inspect(name)} is required"
 
         assert_raise ArgumentError, error_msg, fn ->
-          Genesis.Value.__cast__(%{name => nil}, props)
+          Genesis.Value.cast(%{name => nil}, props)
         end
       end
 
@@ -245,7 +245,7 @@ defmodule Genesis.ValueTest do
         default = fixture(type)
         props = [{name, type, [default: default]}]
 
-        assert %{^name => ^default} = Genesis.Value.__cast__(%{}, props)
+        assert %{^name => ^default} = Genesis.Value.cast(%{}, props)
       end
 
       test "rejects invalid types" do
@@ -258,7 +258,7 @@ defmodule Genesis.ValueTest do
         error_msg =
           ~s|invalid value %{} given to property #{inspect(name)} of type #{inspect(type)}|
 
-        assert_raise ArgumentError, error_msg, fn -> Genesis.Value.__cast__(attrs, props) end
+        assert_raise ArgumentError, error_msg, fn -> Genesis.Value.cast(attrs, props) end
       end
 
       test "ignores keys not in props definition" do
@@ -269,8 +269,8 @@ defmodule Genesis.ValueTest do
         props = [{name, type, [required: true]}]
         attrs = [{name, value}, {:unkown, "value"}]
 
-        assert %{^name => ^value} = Genesis.Value.__cast__(attrs, props)
-        refute Map.has_key?(Genesis.Value.__cast__(attrs, props), :unkown)
+        assert %{^name => ^value} = Genesis.Value.cast(attrs, props)
+        refute Map.has_key?(Genesis.Value.cast(attrs, props), :unkown)
       end
 
       test "handles nil for optional props" do
@@ -280,7 +280,7 @@ defmodule Genesis.ValueTest do
         props = [{name, type, [required: false]}]
         attrs = [{name, nil}]
 
-        assert %{^name => nil} = Genesis.Value.__cast__(attrs, props)
+        assert %{^name => nil} = Genesis.Value.cast(attrs, props)
       end
 
       test "properly casts only valid values" do
@@ -291,7 +291,7 @@ defmodule Genesis.ValueTest do
         props = [{name, type, [required: true]}]
         attrs = [{name, value}]
 
-        assert %{^name => ^value} = Genesis.Value.__cast__(attrs, props)
+        assert %{^name => ^value} = Genesis.Value.cast(attrs, props)
       end
     end
   end

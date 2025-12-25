@@ -95,15 +95,14 @@ defmodule Genesis.Prefab do
     components = Map.fetch!(attrs, :components)
 
     declared =
-      Enum.map(components, fn {component, props} ->
-        component_type = Map.fetch!(components_lookup, component)
-        loaded = Code.ensure_loaded!(component_type)
-        {loaded, {:merge, props}}
+      Enum.map(components, fn {component_alias, props} ->
+        component_type = fetch_component_type!(components_lookup, component_alias, name)
+        {component_type, {:merge, props}}
       end)
 
     inherited =
-      Enum.flat_map(extends, fn name ->
-        %{components: components} = Map.fetch!(prefabs_lookup, name)
+      Enum.flat_map(extends, fn parent_name ->
+        components = fetch_components!(prefabs_lookup, parent_name, name)
         Enum.map(components, &{&1.__struct__, {:inherit, Map.from_struct(&1)}})
       end)
 
@@ -113,6 +112,29 @@ defmodule Genesis.Prefab do
       Enum.map(merged_components, fn {component_type, props} -> component_type.new(props) end)
 
     %Prefab{name: name, extends: extends, components: final_components}
+  end
+
+  defp fetch_component_type!(components_lookup, component_alias, prefab_name) do
+    case Map.fetch(components_lookup, component_alias) do
+      {:ok, type} ->
+        Code.ensure_loaded!(type)
+
+      :error ->
+        raise ArgumentError,
+              "component #{inspect(component_alias)} used in prefab #{inspect(prefab_name)} is not registered. " <>
+                "Register it with Genesis.Manager.register_components/1 first"
+    end
+  end
+
+  defp fetch_components!(prefabs_lookup, parent_name, child_name) do
+    case Map.fetch(prefabs_lookup, parent_name) do
+      {:ok, %{components: components}} ->
+        components
+
+      :error ->
+        raise ArgumentError,
+              "prefab #{inspect(child_name)} extends #{inspect(parent_name)} but #{inspect(parent_name)} is not registered"
+    end
   end
 
   defp merge_components(inherited, declared) do

@@ -97,7 +97,7 @@ defmodule Genesis.Component do
       def __component__(:events), do: @events
       def __component__(:properties), do: @properties
 
-      def cast(attrs), do: Genesis.Value.__cast__(attrs, @properties)
+      def cast(attrs), do: Genesis.Component.__cast__(attrs, @properties)
 
       def attach(entity), do: attach(entity, __MODULE__.new())
 
@@ -197,6 +197,14 @@ defmodule Genesis.Component do
           """
       end
     end
+  end
+
+  @doc false
+  def __cast__(attrs, properties) do
+    Genesis.Value.cast(attrs, properties)
+  rescue
+    e in ArgumentError ->
+      reraise ArgumentError, "[#{inspect(__MODULE__)}] #{Exception.message(e)}", __STACKTRACE__
   end
 
   @doc false
