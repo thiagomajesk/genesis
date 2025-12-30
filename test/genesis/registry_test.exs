@@ -70,7 +70,8 @@ defmodule Genesis.RegistryTest do
       Registry.emplace(registry, entity, %Position{x: 10, y: 20})
 
       assert {^entity, [%Position{x: 10, y: 20}]} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: [Position]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
     end
   end
 
@@ -79,7 +80,8 @@ defmodule Genesis.RegistryTest do
       {:ok, entity} = Registry.create(registry)
 
       assert :ok = Registry.emplace(registry, entity, %Position{x: 10, y: 20})
-      assert {^entity, _name, %{components: [Position]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
     end
 
     test "inserting the same component twice fails", %{registry: registry} do
@@ -100,7 +102,8 @@ defmodule Genesis.RegistryTest do
 
       assert :ok = Registry.replace(registry, entity, %Position{x: 10, y: 20})
       assert {^entity, [%Position{x: 10, y: 20}]} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: [Position]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
     end
 
     test "fails when component does not exist", %{registry: registry} do
@@ -170,7 +173,8 @@ defmodule Genesis.RegistryTest do
       assert :ok = Registry.erase(registry, entity)
 
       assert {^entity, []} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: []}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([]))
     end
 
     test "fails to erase a non-existent entity", %{registry: registry} do
@@ -192,7 +196,8 @@ defmodule Genesis.RegistryTest do
       assert :ok = Registry.erase(registry, entity, Health)
 
       assert {^entity, [%Position{}]} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: [Position]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
     end
   end
 
@@ -210,7 +215,8 @@ defmodule Genesis.RegistryTest do
       assert :ok = Registry.assign(registry, entity, components)
 
       assert {^entity, ^components} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: [Position, Health]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position, Health]))
     end
 
     test "replaces existing components with new ones", %{registry: registry} do
@@ -224,7 +230,8 @@ defmodule Genesis.RegistryTest do
       assert :ok = Registry.assign(registry, entity, components)
 
       assert {^entity, ^components} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: [Position]}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
     end
 
     test "clears all components when assigning empty list", %{registry: registry} do
@@ -236,7 +243,8 @@ defmodule Genesis.RegistryTest do
       assert :ok = Registry.assign(registry, entity, [])
 
       assert {^entity, []} = Registry.fetch(registry, entity)
-      assert {^entity, _name, %{components: []}} = Registry.info(registry, entity)
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([]))
     end
   end
 
@@ -253,6 +261,56 @@ defmodule Genesis.RegistryTest do
 
       assert nil == Registry.info(registry, entity)
       assert nil == Registry.fetch(registry, entity)
+    end
+  end
+
+  describe "streams" do
+    test "streams all metadata", %{registry: registry} do
+      {:ok, entity_1} = Registry.create(registry, metadata: %{foo: "bar"})
+      {:ok, entity_2} = Registry.create(registry, metadata: %{baz: "qux"})
+
+      stream = Registry.metadata(registry)
+
+      record_1 = Enum.find(stream, fn {k, _v} -> k == entity_1 end)
+      record_2 = Enum.find(stream, fn {k, _v} -> k == entity_2 end)
+
+      assert {^entity_1, {nil, %{foo: "bar"}}} = record_1
+      assert {^entity_2, {nil, %{baz: "qux"}}} = record_2
+    end
+
+    test "streams all components", %{registry: registry} do
+      {:ok, entity_1} = Registry.create(registry)
+      {:ok, entity_2} = Registry.create(registry)
+
+      Registry.emplace(registry, entity_1, %Position{x: 10, y: 20})
+      Registry.emplace(registry, entity_2, %Position{x: 30, y: 40})
+
+      stream = Registry.components(registry)
+
+      record_1 = Enum.find(stream, fn {k, _v} -> k == entity_1 end)
+      record_2 = Enum.find(stream, fn {k, _v} -> k == entity_2 end)
+
+      assert {^entity_1, {Position, %Position{x: 10, y: 20}}} = record_1
+      assert {^entity_2, {Position, %Position{x: 30, y: 40}}} = record_2
+    end
+
+    test "streams all entities", %{registry: registry} do
+      {:ok, entity_1} = Registry.create(registry)
+      {:ok, entity_2} = Registry.create(registry)
+
+      Registry.emplace(registry, entity_1, %Position{x: 10, y: 20})
+      Registry.emplace(registry, entity_2, %Position{x: 30, y: 40})
+
+      Registry.register(registry, entity_1, "Foo")
+      Registry.register(registry, entity_2, "Bar")
+
+      stream = Registry.entities(registry)
+
+      record_1 = Enum.find(stream, fn {k, _v} -> k == entity_1 end)
+      record_2 = Enum.find(stream, fn {k, _v} -> k == entity_2 end)
+
+      assert {^entity_1, {"Foo", _metadata, [%Position{x: 10, y: 20}]}} = record_1
+      assert {^entity_2, {"Bar", _metadata, [%Position{x: 30, y: 40}]}} = record_2
     end
   end
 end

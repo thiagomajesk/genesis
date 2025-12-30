@@ -13,38 +13,30 @@ defmodule Genesis.Manager do
   end
 
   @doc """
-  Returns all components registered in the manager.
+  Returns a stream of components registered in the manager.
 
-      iex> Genesis.Manager.components()
+      iex> Genesis.Manager.components() |> Enum.to_list()
       [{"health", Health}, {"position", Position}]
   """
   def components do
-    match_spec = [
-      {
-        {:_, :_, :"$1", %{type: :"$2"}},
-        [],
-        [{{:"$1", :"$2"}}]
-      }
-    ]
+    stream = Genesis.Registry.metadata(:components)
 
-    Genesis.Registry.select(:components, :metadata, match_spec)
+    Stream.map(stream, fn {_entity, {name, metadata}} ->
+      {name, metadata.type}
+    end)
   end
 
   @doc """
-  Returns all prefabs registered in the manager.
+  Returns a stream of prefabs registered in the manager.
 
-      iex> Genesis.Manager.prefabs()
+      iex> Genesis.Manager.prefabs() |> Enum.to_list()
       [{"Being", %Genesis.Prefab{components: components}}]
   """
   def prefabs do
-    metadata_stream = Genesis.Registry.metadata(:prefabs)
-    lookup = Map.new(metadata_stream, fn {entity, info} -> {entity, info} end)
+    stream = Genesis.Registry.entities(:prefabs)
 
-    entities_stream = Genesis.Registry.entities(:prefabs)
-
-    Enum.map(entities_stream, fn {entity, info} ->
-      {name, %{extends: extends}} = Map.fetch!(lookup, entity)
-      components = Enum.map(info, fn {_type, component} -> component end)
+    Stream.map(stream, fn {_entity, {name, metadata, components}} ->
+      extends = Map.get(metadata, :extends, [])
       {name, %Genesis.Prefab{name: name, extends: extends, components: components}}
     end)
   end

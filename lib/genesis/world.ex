@@ -95,21 +95,24 @@ defmodule Genesis.World do
 
     case Keyword.get(opts, :format_as, :list) do
       :list ->
-        Stream.map(stream, fn {entity, components} ->
-          {entity, Enum.map(components, fn {_type, component} -> component end)}
+        Stream.map(stream, fn {entity, {_, _, components}} ->
+          {entity, components}
         end)
 
       :map ->
-        components = Genesis.Manager.components()
+        # TODO: Potentially cache it in persistent term for fast lookups
+        registered_components = Genesis.Manager.components()
 
-        components_lookup =
-          Map.new(components, fn {as, component_type} -> {component_type, as} end)
+        lookup =
+          Map.new(registered_components, fn {as, component_type} ->
+            {component_type, as}
+          end)
 
-        Stream.map(stream, fn {entity, components} ->
+        Stream.map(stream, fn {entity, {_, _, components}} ->
           {entity,
-           Map.new(components, fn {component_type, component} ->
-             properties = Map.from_struct(component)
-             {Map.fetch!(components_lookup, component_type), properties}
+           Map.new(components, fn component ->
+             {component_type, properties} = Map.pop(component, :__struct__)
+             {Map.fetch!(lookup, component_type), properties}
            end)}
         end)
     end

@@ -94,7 +94,8 @@ defmodule Genesis.ManagerTest do
         }
       })
 
-      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] =
+               Enum.to_list(Manager.prefabs())
 
       assert [
                %Selectable{},
@@ -127,7 +128,8 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] =
+               Enum.to_list(Manager.prefabs())
 
       assert [
                %Selectable{},
@@ -160,7 +162,8 @@ defmodule Genesis.ManagerTest do
         ]
       })
 
-      assert [{"Being", %Prefab{extends: [], components: components}}] = Manager.prefabs()
+      assert [{"Being", %Prefab{extends: [], components: components}}] =
+               Enum.to_list(Manager.prefabs())
 
       assert [
                %Selectable{},
@@ -184,7 +187,8 @@ defmodule Genesis.ManagerTest do
         }
       })
 
-      assert [{"Crate", %Prefab{components: components}}] = Manager.prefabs()
+      assert [{"Crate", %Prefab{components: components}}] =
+               Enum.to_list(Manager.prefabs())
 
       assert [%Container{capacity: 10, name: "Crate"}] =
                Enum.filter(components, &match?(%Container{}, &1))

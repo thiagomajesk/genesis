@@ -156,22 +156,19 @@ defmodule Genesis.Query do
 
   defp apply_filter(stream, :all, lookup) do
     Stream.filter(stream, fn {_entity, {_name, metadata}} ->
-      components = Map.get(metadata, :components, [])
-      MapSet.subset?(lookup, MapSet.new(components))
+      MapSet.subset?(lookup, metadata.types)
     end)
   end
 
   defp apply_filter(stream, :any, lookup) do
     Stream.filter(stream, fn {_entity, {_name, metadata}} ->
-      components = Map.get(metadata, :components, [])
-      not MapSet.disjoint?(lookup, MapSet.new(components))
+      not MapSet.disjoint?(lookup, metadata.types)
     end)
   end
 
   defp apply_filter(stream, :none, lookup) do
     Stream.filter(stream, fn {_entity, {_name, metadata}} ->
-      components = Map.get(metadata, :components, [])
-      MapSet.disjoint?(lookup, MapSet.new(components))
+      MapSet.disjoint?(lookup, metadata.types)
     end)
   end
 end

@@ -235,9 +235,48 @@ defmodule Genesis.Registry do
   and components is a list of component structs attached to that entity.
   """
   def entities(registry) when is_atom(registry) do
-    registry
-    |> components()
-    |> group_by_key()
+    metadata_table = table!(registry, :metadata)
+    components_table = table!(registry, :components)
+
+    metadata_stream = stream_table(metadata_table)
+    components_stream = stream_table(components_table)
+
+    stream = Stream.concat(metadata_stream, components_stream)
+
+    Stream.transform(stream, %{}, fn
+      {^metadata_table, entity, name, metadata}, acc ->
+        counters = {0, MapSet.size(metadata.types)}
+        {[], Map.put(acc, entity, {name, metadata, [], counters})}
+
+      {^components_table, entity, _type, component}, acc ->
+        case Map.fetch!(acc, entity) do
+          {name, metadata, components, {mapped, expected}}
+          when mapped + 1 >= expected ->
+            components = Enum.reverse([component | components])
+            record = {entity, {name, metadata, components}}
+            {[record], Map.delete(acc, entity)}
+
+          {name, metadata, components, {mapped, expected}} ->
+            counters = {mapped + 1, expected}
+            components = [component | components]
+            record = {name, metadata, components, counters}
+            {[], Map.put(acc, entity, record)}
+        end
+    end)
+  end
+
+  @doc """
+  Utility function that allows grouping a registry stream of records by their key.
+  Returns a stream of `{key, [values]}` tuples where key is usually the entity reference.
+  """
+  def group_by_key(stream) do
+    Stream.transform(
+      stream,
+      fn -> %{} end,
+      fn {k, v}, acc -> {[], Map.update(acc, k, [v], &[v | &1])} end,
+      fn acc -> {Enum.map(acc, fn {k, vs} -> {k, Enum.reverse(vs)} end), nil} end,
+      fn _ -> nil end
+    )
   end
 
   defp table!(registry, :metadata), do: Module.concat(registry, Metadata)
@@ -275,8 +314,9 @@ defmodule Genesis.Registry do
             [] ->
               :mnesia.write({components_table, entity, type, component})
 
-              components = Map.get(metadata, :components, [])
-              updated_metadata = Map.put(metadata, :components, [type | components])
+              types = Map.get(metadata, :types, MapSet.new())
+              updated_types = MapSet.put(types, type)
+              updated_metadata = Map.put(metadata, :types, updated_types)
               :mnesia.write({metadata_table, entity, name, updated_metadata})
 
             [{^components_table, ^entity, ^type, _component}] ->
@@ -348,7 +388,7 @@ defmodule Genesis.Registry do
         [{_table, ^entity, name, metadata}] ->
           :mnesia.delete({components_table, entity})
 
-          updated_metadata = Map.put(metadata, :components, [])
+          updated_metadata = Map.put(metadata, :types, MapSet.new())
           :mnesia.write({metadata_table, entity, name, updated_metadata})
       end
     end)
@@ -373,9 +413,9 @@ defmodule Genesis.Registry do
             [{table, ^entity, type, component}] ->
               :mnesia.delete_object({table, entity, type, component})
 
-              components = Map.get(metadata, :components, [])
-              updated_components = Enum.reject(components, &(&1 == type))
-              updated_metadata = Map.put(metadata, :components, updated_components)
+              types = Map.get(metadata, :types, MapSet.new())
+              updated_types = MapSet.delete(types, type)
+              updated_metadata = Map.put(metadata, :types, updated_types)
               :mnesia.write({metadata_table, entity, name, updated_metadata})
           end
       end
@@ -465,17 +505,7 @@ defmodule Genesis.Registry do
     end
   end
 
-  defp group_by_key(stream) do
-    Stream.transform(
-      stream,
-      fn -> %{} end,
-      fn {k, v}, acc -> {[], Map.update(acc, k, [v], &[v | &1])} end,
-      fn acc -> {Enum.map(acc, fn {k, vs} -> {k, Enum.reverse(vs)} end), nil} end,
-      fn _ -> nil end
-    )
-  end
-
-  defp stream_table(table, transform) do
+  defp stream_table(table, transform \\ & &1) do
     start_fun = fn -> :mnesia.dirty_first(table) end
 
     next_fun = fn
@@ -510,7 +540,7 @@ defmodule Genesis.Registry do
         [{_table, ^entity, name, metadata}] ->
           :mnesia.delete({components_table, entity})
           component_types = emplace_many(components_table, entity, components)
-          updated_metadata = Map.put(metadata, :components, component_types)
+          updated_metadata = Map.put(metadata, :types, MapSet.new(component_types))
           :mnesia.write({metadata_table, entity, name, updated_metadata})
       end
     end)
