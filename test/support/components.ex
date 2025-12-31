@@ -39,5 +39,6 @@ end
 defmodule Genesis.Components.MetaInfo do
   use Genesis.Component
 
-  prop :creation_date, :any
+  prop :metadata, :any
+  prop :creation_date, Date
 end

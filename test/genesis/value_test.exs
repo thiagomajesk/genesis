@@ -1,6 +1,4 @@
 defmodule Genesis.ValueTest do
-  @types [:atom, :string, :float, :integer, :boolean]
-
   use ExUnit.Case, async: true
 
   describe "prop/3" do
@@ -208,9 +206,25 @@ defmodule Genesis.ValueTest do
         Genesis.Value.cast(%{name => "invalid"}, props)
       end
     end
+
+    test "accepts any" do
+      name = :test_any
+      value = %{metadata: [%{foo: "bar"}]}
+      props = [{name, :any, [required: true]}]
+
+      assert %{^name => ^value} = Genesis.Value.cast(%{name => value}, props)
+    end
+
+    test "accepts struct types" do
+      name = :test_date
+      date = Date.utc_today()
+      props = [{name, {:struct, Date}, []}]
+
+      assert %{^name => ^date} = Genesis.Value.cast(%{name => date}, props)
+    end
   end
 
-  for type <- @types do
+  for type <- [:atom, :string, :float, :integer, :boolean] do
     describe "cast/2 for #{type}" do
       test "casts attributes by property definitions" do
         type = unquote(type)

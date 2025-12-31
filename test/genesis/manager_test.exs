@@ -87,7 +87,7 @@ defmodule Genesis.ManagerTest do
 
   describe "prefabs" do
     test "create prefab with map and default alias" do
-      now = DateTime.utc_now()
+      now = Date.utc_today()
 
       Manager.register_components([
         Health,
@@ -121,7 +121,7 @@ defmodule Genesis.ManagerTest do
     end
 
     test "create prefab with list and custom alias" do
-      now = DateTime.utc_now()
+      now = Date.utc_today()
 
       Manager.register_components([
         {"prefix::health", Health},
@@ -155,7 +155,7 @@ defmodule Genesis.ManagerTest do
     end
 
     test "create prefab with keyword list" do
-      now = DateTime.utc_now()
+      now = Date.utc_today()
 
       Manager.register_components([
         {:health, Health},

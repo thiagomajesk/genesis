@@ -1,5 +1,5 @@
 defmodule Genesis.Value do
-  @types [:any, :atom, :string, :boolean, :float, :integer]
+  @valid_types [:any, :atom, :string, :boolean, :float, :integer]
 
   @doc """
   Defines a property for a Component.
@@ -33,6 +33,7 @@ defmodule Genesis.Value do
       prop :email, :string, format: ~r/@/
       prop :bonus, :float, min: 0.0, max: 95.5
       prop :alive, :boolean, default: true
+      prop :created_at, Date, required: true
 
   ## Options
 
@@ -56,7 +57,7 @@ defmodule Genesis.Value do
     attrs
     |> normalize()
     |> merge_defaults(props)
-    |> cast_props(props)
+    |> cast_properties(props)
   end
 
   @doc false
@@ -98,18 +99,6 @@ defmodule Genesis.Value do
         file,
         line,
         "another property with the name #{inspect(name)} is already defined"
-      )
-    end
-
-    #
-    # Prop type validation
-    #
-    if type not in @types do
-      compile_error!(
-        module,
-        file,
-        line,
-        "a property type must be one of #{inspect(@types)}, got: #{inspect(type)}"
       )
     end
 
@@ -257,7 +246,24 @@ defmodule Genesis.Value do
       )
     end
 
-    Module.put_attribute(module, :properties, {name, type, opts})
+    #
+    # Prop type validation
+    #
+    cond do
+      type in @valid_types ->
+        Module.put_attribute(module, :properties, {name, type, opts})
+
+      String.starts_with?(Atom.to_string(type), "Elixir.") ->
+        Module.put_attribute(module, :properties, {name, {:struct, type}, opts})
+
+      true ->
+        compile_error!(
+          module,
+          file,
+          line,
+          "a property type must be one of #{inspect(@valid_types)}, got: #{inspect(type)}"
+        )
+    end
   end
 
   defp compile_error!(module, file, line, msg) do
@@ -297,46 +303,53 @@ defmodule Genesis.Value do
     |> Map.merge(attrs)
   end
 
-  defp cast_props(attrs, props) do
+  defp cast_properties(attrs, props) do
     Map.new(props, fn
-      {name, type, opts} when type in @types ->
+      {name, type, opts} when type in @valid_types ->
         value = fetch_value(attrs, {name, type, opts})
+        cast_property_value(value, {name, type, opts})
 
-        if Keyword.get(opts, :required, false) and empty?(value) do
-          raise ArgumentError, "property #{inspect(name)} is required"
-        end
-
-        if not valid_value?(type, value) do
-          raise ArgumentError,
-                "invalid value #{inspect(value)} given to property #{inspect(name)} of type #{inspect(type)}"
-        end
-
-        min = Keyword.get(opts, :min)
-
-        if not is_nil(min) and value < min do
-          raise ArgumentError,
-                "value #{inspect(value)} for property #{inspect(name)} is less than the minimum allowed #{inspect(min)}"
-        end
-
-        max = Keyword.get(opts, :max)
-
-        if not is_nil(max) and value > max do
-          raise ArgumentError,
-                "value #{inspect(value)} for property #{inspect(name)} is greater than the maximum allowed #{inspect(max)}"
-        end
-
-        format = Keyword.get(opts, :format)
-
-        if not is_nil(format) and not Regex.match?(format, value) do
-          raise ArgumentError,
-                "value #{inspect(value)} for property #{inspect(name)} does not match the required format #{inspect(format)}"
-        end
-
-        {name, value}
+      {name, special, opts} when is_tuple(special) ->
+        value = fetch_value(attrs, {name, special, opts})
+        cast_property_value(value, {name, special, opts})
 
       {name, type, _opts} ->
         raise ArgumentError, "invalid property type #{inspect(type)} for #{inspect(name)}"
     end)
+  end
+
+  defp cast_property_value(value, {name, type, opts}) do
+    if Keyword.get(opts, :required, false) and empty?(value) do
+      raise ArgumentError, "property #{inspect(name)} is required"
+    end
+
+    if not valid_value?(type, value) do
+      raise ArgumentError,
+            "invalid value #{inspect(value)} given to property #{inspect(name)} of type #{inspect(type)}"
+    end
+
+    min = Keyword.get(opts, :min)
+
+    if not is_nil(min) and value < min do
+      raise ArgumentError,
+            "value #{inspect(value)} for property #{inspect(name)} is less than the minimum allowed #{inspect(min)}"
+    end
+
+    max = Keyword.get(opts, :max)
+
+    if not is_nil(max) and value > max do
+      raise ArgumentError,
+            "value #{inspect(value)} for property #{inspect(name)} is greater than the maximum allowed #{inspect(max)}"
+    end
+
+    format = Keyword.get(opts, :format)
+
+    if not is_nil(format) and not Regex.match?(format, value) do
+      raise ArgumentError,
+            "value #{inspect(value)} for property #{inspect(name)} does not match the required format #{inspect(format)}"
+    end
+
+    {name, value}
   end
 
   defp fetch_value(attrs, {name, type, opts}) do
