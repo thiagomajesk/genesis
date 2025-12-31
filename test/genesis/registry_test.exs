@@ -73,6 +73,16 @@ defmodule Genesis.RegistryTest do
       assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
       assert MapSet.equal?(types, MapSet.new([Position]))
     end
+
+    test "fetchs components of an entity by name", %{registry: registry} do
+      {:ok, entity} = Registry.create(registry, name: "Foo")
+
+      Registry.emplace(registry, entity, %Position{x: 10, y: 20})
+
+      assert {^entity, [%Position{x: 10, y: 20}]} = Registry.fetch(registry, "Foo")
+      assert {^entity, _name, %{types: types}} = Registry.info(registry, entity)
+      assert MapSet.equal?(types, MapSet.new([Position]))
+    end
   end
 
   describe "emplace" do

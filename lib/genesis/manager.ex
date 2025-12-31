@@ -91,8 +91,7 @@ defmodule Genesis.Manager do
   Prefabs are templates for creating entities with predefined components and properties.
   """
   def register_prefab(attrs) when is_map(attrs) do
-    %{name: name, extends: extends, components: components} =
-      Genesis.Prefab.load(attrs, prefabs: prefabs(), components: components())
+    %{name: name, extends: extends, components: components} = Genesis.Prefab.load(attrs)
 
     case Genesis.Registry.lookup(:prefabs, name) do
       {_entity, _name, _metadata} ->

@@ -57,6 +57,12 @@ defmodule Genesis.Registry do
   Fetches all components of an entity.
   Returns `{entity, components}` if found, or `nil`.
   """
+  def fetch(registry, entity_or_name)
+
+  def fetch(registry, name) when is_atom(registry) and is_binary(name) do
+    with {entity, ^name, _metadata} <- lookup(registry, name), do: fetch(registry, entity)
+  end
+
   def fetch(registry, entity) when is_atom(registry) and is_reference(entity) do
     case do_fetch(registry, entity) do
       nil ->

@@ -26,11 +26,7 @@ defmodule Genesis.PrefabTest do
              name: "Human",
              extends: ["Being"],
              components: components
-           } =
-             Prefab.load(human_attrs,
-               prefabs: Manager.prefabs(),
-               components: Manager.components()
-             )
+           } = Prefab.load(human_attrs)
 
     assert [
              %Health{current: 80, maximum: 100},
