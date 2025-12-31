@@ -13,17 +13,37 @@ defmodule Genesis.Manager do
   end
 
   @doc """
-  Returns a stream of components registered in the manager.
+  Returns a map of components registered in the manager.
 
-      iex> Genesis.Manager.components() |> Enum.to_list()
-      [{"health", Health}, {"position", Position}]
+   ## Options
+
+    * `:index` - selects the key for the returned map (`:name` or `:type`).
+
+  ## Examples
+
+      iex> Genesis.Manager.components(index: :name)
+      %{"health" => Health, "position" => Position}
+
+      iex> Genesis.Manager.components(index: :type)
+      %{Health => "health", Position => "position"}
   """
-  def components do
+  def components(opts \\ []) do
     stream = Genesis.Registry.metadata(:components)
 
-    Stream.map(stream, fn {_entity, {name, metadata}} ->
-      {name, metadata.type}
-    end)
+    case Keyword.get(opts, :index, :name) do
+      :name ->
+        Map.new(stream, fn {_entity, {name, metadata}} ->
+          {name, metadata.type}
+        end)
+
+      :type ->
+        Map.new(stream, fn {_entity, {name, metadata}} ->
+          {metadata.type, name}
+        end)
+
+      other ->
+        raise ArgumentError, "invalid :index option #{inspect(other)}"
+    end
   end
 
   @doc """

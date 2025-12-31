@@ -26,13 +26,12 @@ defmodule Genesis.ManagerTest do
 
       components = Manager.components()
 
-      assert [
-               {"health", Health},
-               {"moniker", Moniker},
-               {"position", Position},
-               {"selectable", Selectable}
-             ] =
-               Enum.sort(components)
+      assert %{
+               "health" => Health,
+               "moniker" => Moniker,
+               "position" => Position,
+               "selectable" => Selectable
+             } = components
     end
 
     test "register_component with custom alias" do
@@ -45,13 +44,28 @@ defmodule Genesis.ManagerTest do
 
       components = Manager.components()
 
-      assert [
-               {"prefix::health", Health},
-               {"prefix::moniker", Moniker},
-               {"prefix::position", Position},
-               {"prefix::selectable", Selectable}
-             ] =
-               Enum.sort(components)
+      assert %{
+               "prefix::health" => Health,
+               "prefix::moniker" => Moniker,
+               "prefix::position" => Position,
+               "prefix::selectable" => Selectable
+             } = components
+    end
+
+    test "components indexed by type" do
+      Manager.register_components([
+        Health,
+        Moniker,
+        Position,
+        Selectable
+      ])
+
+      assert %{
+               Health => "health",
+               Moniker => "moniker",
+               Position => "position",
+               Selectable => "selectable"
+             } = Manager.components(index: :type)
     end
   end
 

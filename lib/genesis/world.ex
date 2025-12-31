@@ -100,20 +100,16 @@ defmodule Genesis.World do
         end)
 
       :map ->
-        # TODO: Potentially cache it in persistent term for fast lookups
-        registered_components = Genesis.Manager.components()
-
-        lookup =
-          Map.new(registered_components, fn {as, component_type} ->
-            {component_type, as}
-          end)
+        lookup = Genesis.Manager.components(index: :type)
 
         Stream.map(stream, fn {entity, {_, _, components}} ->
-          {entity,
-           Map.new(components, fn component ->
-             {component_type, properties} = Map.pop(component, :__struct__)
-             {Map.fetch!(lookup, component_type), properties}
-           end)}
+          aliased_components =
+            Map.new(components, fn component ->
+              {component_type, properties} = Map.pop(component, :__struct__)
+              {Map.fetch!(lookup, component_type), properties}
+            end)
+
+          {entity, aliased_components}
         end)
     end
   end
