@@ -85,10 +85,13 @@ defmodule Genesis.Component do
   defmacro __before_compile__(env) do
     quote do
       @valid_keys Enum.map(@properties, &elem(&1, 0))
+      @integer_keys Genesis.Component.__props__(@properties, :integer)
 
       defstruct Genesis.Value.__defaults__(@properties)
 
       defguardp is_prop(prop) when is_atom(prop) and prop in @valid_keys
+      defguardp is_integer_prop(prop) when is_prop(prop) and prop in @integer_keys
+      defguardp is_min_max(min, max) when is_integer(min) and is_integer(max) and min <= max
 
       defguardp is_props(props)
                 when (is_list(props) and props != []) or
@@ -161,7 +164,7 @@ defmodule Genesis.Component do
           iex> Health.at_least(:current, 50)
           [{entity_1, %Health{current: 75}}]
       """
-      def at_least(prop, value) when is_prop(prop) and is_integer(value),
+      def at_least(prop, value) when is_integer_prop(prop) and is_integer(value),
         do: Genesis.Query.__at_least__(:entities, __MODULE__, prop, value)
 
       @doc """
@@ -172,7 +175,7 @@ defmodule Genesis.Component do
           iex> Health.at_most(:current, 50)
           [{entity_1, %Health{current: 25}}]
       """
-      def at_most(prop, value) when is_prop(prop) and is_integer(value),
+      def at_most(prop, value) when is_integer_prop(prop) and is_integer(value),
         do: Genesis.Query.__at_most__(:entities, __MODULE__, prop, value)
 
       @doc """
@@ -183,9 +186,8 @@ defmodule Genesis.Component do
           iex> Health.between(:current, 50, 100)
           [{entity_1, %Health{current: 75}}]
       """
-      def between(prop, min, max)
-          when is_prop(prop) and is_integer(min) and is_integer(max) and min <= max,
-          do: Genesis.Query.__between__(:entities, __MODULE__, prop, min, max)
+      def between(prop, min, max) when is_integer_prop(prop) and is_min_max(min, max),
+        do: Genesis.Query.__between__(:entities, __MODULE__, prop, min, max)
 
       if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 2}) do
         raise CompileError,
@@ -197,6 +199,14 @@ defmodule Genesis.Component do
           """
       end
     end
+  end
+
+  @doc false
+  def __props__(properties, type) do
+    Enum.reduce(properties, [], fn
+      {name, ^type, _opts}, acc -> [name | acc]
+      {_name, _type, _opts}, acc -> acc
+    end)
   end
 
   @doc false
@@ -273,11 +283,11 @@ defmodule Genesis.Component do
       %{^property => value} = component ->
         updated = Map.put(component, property, fun.(value))
 
-        case Genesis.Registry.replace(registry, entity, updated) do
-          :ok ->
-            invoke_hook(component_type, :updated, entity, updated)
+    case Genesis.Registry.replace(registry, entity, updated) do
+      :ok ->
+        invoke_hook(component_type, :updated, entity, updated)
 
-          {:error, _reason} ->
+      {:error, _reason} ->
             :error
         end
 
