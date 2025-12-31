@@ -263,14 +263,7 @@ defmodule Genesis.Component do
       component ->
         casted = component_type.cast(properties)
         updated = Map.merge(component, casted)
-
-        case Genesis.Registry.replace(registry, entity, updated) do
-          :ok ->
-            invoke_hook(component_type, :updated, entity, updated)
-
-          {:error, _reason} ->
-            :error
-        end
+        do_update(registry, component_type, entity, updated)
     end
   end
 
@@ -282,16 +275,19 @@ defmodule Genesis.Component do
 
       %{^property => value} = component ->
         updated = Map.put(component, property, fun.(value))
+        do_update(registry, component_type, entity, updated)
 
+      _component ->
+        :error
+    end
+  end
+
+  defp do_update(registry, component_type, entity, updated) do
     case Genesis.Registry.replace(registry, entity, updated) do
       :ok ->
         invoke_hook(component_type, :updated, entity, updated)
 
       {:error, _reason} ->
-            :error
-        end
-
-      _component ->
         :error
     end
   end
