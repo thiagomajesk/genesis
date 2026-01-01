@@ -1,4 +1,21 @@
 defmodule Genesis.Registry do
+  @moduledoc """
+  Provides low-level entity storage backed by Mnesia.
+
+  A registry contains two Mnesia tables that are always kept in sync.
+
+    * `Metadata` - stores entity metadata such as name and custom data
+    * `Components` - stores components associated with entities
+
+    Genesis initializes three registries by default:
+
+    * `:entities` - stores runtime information about entities
+    * `:prefabs` - stores information about registered prefabs
+    * `:components` - stores information about registered components
+  """
+
+  import Genesis.Utils, only: [is_name: 1]
+
   @doc """
   Creates a new entity in the registry.
   Returns `{:ok, entity}` on success, or `{:error, reason}` on failure.
@@ -39,7 +56,7 @@ defmodule Genesis.Registry do
   Looks up an entity by a registered name.
   Returns `{entity, name, metadata}` if found, or `nil`.
   """
-  def lookup(registry, name) when is_atom(registry) do
+  def lookup(registry, name) when is_atom(registry) and is_name(name) do
     table = table!(registry, :metadata)
 
     # The information in the metadata table is not supposed to change often once
@@ -54,12 +71,30 @@ defmodule Genesis.Registry do
   end
 
   @doc """
+  Checks if an entity or name exists in the registry.
+  Returns `true` if found, or `false` otherwise.
+  """
+  def exists?(registry, entity_or_name)
+
+  def exists?(registry, entity) when is_atom(registry) and is_reference(entity) do
+    table = table!(registry, :metadata)
+    result = :mnesia.dirty_read(table, entity)
+    match?([{_table, ^entity, _name, _metadata}], result)
+  end
+
+  def exists?(registry, name) when is_atom(registry) and is_name(name) do
+    table = table!(registry, :metadata)
+    result = :mnesia.dirty_index_read(table, name, :name)
+    match?([{_table, _entity, ^name, _metadata}], result)
+  end
+
+  @doc """
   Fetches all components of an entity.
   Returns `{entity, components}` if found, or `nil`.
   """
   def fetch(registry, entity_or_name)
 
-  def fetch(registry, name) when is_atom(registry) and is_binary(name) do
+  def fetch(registry, name) when is_atom(registry) and is_name(name) do
     with {entity, ^name, _metadata} <- lookup(registry, name), do: fetch(registry, entity)
   end
 

@@ -1,4 +1,5 @@
 defmodule Genesis.Herald do
+  @moduledoc false
   use GenStage
 
   def start_link(opts) do

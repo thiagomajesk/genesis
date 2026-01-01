@@ -3,21 +3,33 @@ defmodule Genesis do
   Genesis is a framework for building ECS-based games in Elixir.
   It provides a flexible way to manage game entities, components, and event-driven game logic.
 
-  ## Entities
-  Entities are unique references that can have components attached to them, which define their behavior and state.
+  # What is ECS?
 
-  ## Components
-  Components are modular pieces of state or behavior that can be attached to game entities. They encapsulate specific functionality,
-  allowing for great granularity when modeling behaviors like health, position, inventory, etc.
+  Entity Component System (ECS) is an architectural pattern commonly used in game development that promotes
+  composition over inheritance and separates data from behavior. At its core, an ECS consists of:
 
-  ## Prefabs
-  Prefabs are templates for creating game entities with predefined sets of components and properties.
-  They allow for rapid instantiation of complex entities that have shared information with their parents.
+  - **Entities**: Unique identifiers that represent game objects (a player, an enemy, a tree, etc.)
+  - **Components**: Plain data containers that define aspects of an entity (position, health, inventory)
+  - **Systems**: Logic that operates on entities with specific sets of components
+
+  ## Entities and Components
+
+  In Genesis, entities are unique references that can have components attached to them. Each entity acts as a container
+  of components, which together define the entity behavior and state. Components on the other hand are the modular pieces of state or behavior
+  that can be attached to game entities. They encapsulate specific functionality, allowing for great granularity when modeling behaviors.
+  By composing entities from different components, you can create complex behaviors from simple, reusable building blocks.
+
+  ## The S is silent
+
+  Most ECS implementations heavily rely on "Systems" to run game logic in tight loops while Genesis focus on the core building blocks and embraces
+  an **event-driven architecture** inspired by the design philosophies of [Caves of Qud](https://www.cavesofqud.com/) and [ADOM (Ancient Domains of Mystery)](https://www.adom.de/).
+
+  This event-driven approach is particularly powerful for turn-based games, roguelikes, simulation games, and any scenario where game logic is better expressed
+  as reactions to discrete events rather than a tight loop. Altough Genesis uses events as the main communication mechanism, it doesn't dictate how your main game loop should work
 
   ## Events
-  Events are messages that are sent to entities to trigger behavior in their components.
 
-  ### Event routing
+  Events are messages that are sent to entities to trigger behavior in their components.
 
   Events sent to the same entity are guaranteed to be processed in order, while events sent to
   different entities are processed concurrently. This ensures consistency in entity state while maximizing performance.

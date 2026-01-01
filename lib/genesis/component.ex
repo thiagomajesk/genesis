@@ -4,9 +4,11 @@ defmodule Genesis.Component do
   Components are modular pieces of state or behavior that can be attached to entities.
   """
 
+  import Genesis.Utils, only: [is_handle: 1]
+
   @type event :: Genesis.Event.t()
-  @type props :: keyword() | map()
   @type entity :: reference()
+  @type properties :: keyword() | map()
 
   @optional_callbacks handle_event: 2
 
@@ -14,7 +16,7 @@ defmodule Genesis.Component do
   Creates a new component by casting the given properties.
   The given properties are passed to the `cast/1` function.
   """
-  @callback new(props()) :: struct()
+  @callback new(properties()) :: struct()
 
   @doc """
   Called when a component is `:attached`, `:removed` or `:updated` on an entity.
@@ -26,20 +28,20 @@ defmodule Genesis.Component do
   Casts the given properties into a map of permitted values.
   This function normalizes input that can be used to create a component.
   """
-  @callback cast(props()) :: map()
+  @callback cast(properties()) :: map()
 
   @doc """
   Attaches a component to an entity.
-  Returns `:ok` if the component was successfully attached, `:noop` if a component with the same props
-  is already attached, or `:error` if the same component with different props is already attached.
+  Returns `:ok` if the component was successfully attached, `:noop` if a component with the same properties
+  is already attached, or `:error` if the same component with different properties is already attached.
   """
-  @callback attach(entity(), props()) :: :ok | :noop | :error
+  @callback attach(entity(), properties()) :: :ok | :noop | :error
 
   @doc """
   Updates a component attached to an entity by merging the given properties.
   Will return `:noop` if the component is not present or `:error` if the component cannot be replaced.
   """
-  @callback update(entity(), props()) :: :ok | :noop | :error
+  @callback update(entity(), properties()) :: :ok | :noop | :error
 
   @doc """
   Updates a specific property of a component attached to the entity.
@@ -84,43 +86,49 @@ defmodule Genesis.Component do
 
   defmacro __before_compile__(env) do
     quote do
-      @valid_keys Enum.map(@properties, &elem(&1, 0))
-      @integer_keys Genesis.Component.__props__(@properties, :integer)
+      @valid_properties Enum.map(@properties, &elem(&1, 0))
+      @integer_properties Genesis.Component.__properties__(@properties, :integer)
 
       defstruct Genesis.Value.__defaults__(@properties)
 
-      defguardp is_prop(prop) when is_atom(prop) and prop in @valid_keys
-      defguardp is_integer_prop(prop) when is_prop(prop) and prop in @integer_keys
+      defguardp is_property(property) when is_atom(property) and property in @valid_properties
+
+      defguardp is_integer_property(property)
+                when is_property(property) and property in @integer_properties
+
       defguardp is_min_max(min, max) when is_integer(min) and is_integer(max) and min <= max
 
-      defguardp is_props(props)
-                when (is_list(props) and props != []) or
-                       (is_non_struct_map(props) and props != %{})
+      defguardp is_non_empty_pairs(properties)
+                when (is_list(properties) and properties != []) or
+                       (is_non_struct_map(properties) and properties != %{})
 
       def __component__(:events), do: @events
       def __component__(:properties), do: @properties
 
-      def cast(attrs), do: Genesis.Component.__cast__(attrs, @properties)
+      def cast(attrs) when is_list(attrs) or is_non_struct_map(attrs),
+        do: Genesis.Component.__cast__(attrs, @properties)
 
-      def attach(entity), do: attach(entity, __MODULE__.new())
+      def attach(entity) when is_reference(entity),
+        do: attach(entity, __MODULE__.new())
 
-      def attach(entity, props) when is_props(props),
-        do: attach(entity, __MODULE__.new(props))
+      def attach(entity, properties) when is_reference(entity) and is_non_empty_pairs(properties),
+        do: attach(entity, __MODULE__.new(properties))
 
-      def attach(entity, %{__struct__: __MODULE__} = component),
-        do: Genesis.Component.__attach__(:entities, __MODULE__, entity, component)
+      def attach(entity, component)
+          when is_reference(entity) and is_struct(component, __MODULE__),
+          do: Genesis.Component.__attach__(:entities, __MODULE__, entity, component)
 
-      def remove(entity),
+      def remove(entity) when is_reference(entity),
         do: Genesis.Component.__remove__(:entities, __MODULE__, entity)
 
-      def update(entity, props) when is_props(props),
-        do: Genesis.Component.__update__(:entities, __MODULE__, entity, props)
+      def update(entity, properties) when is_reference(entity) and is_non_empty_pairs(properties),
+        do: Genesis.Component.__update__(:entities, __MODULE__, entity, properties)
 
       # We don't use a guard in this case because the return value has better semantics.
       # The query functions on the other hand need it because returning empty would have
-      # two meanings: a) Invalid prop that will never match b) No entity actually matched.
-      def update(entity, prop, fun) when is_atom(prop) and is_function(fun, 1),
-        do: Genesis.Component.__update__(:entities, __MODULE__, entity, prop, fun)
+      # two meanings: a) Invalid property that will never match b) No entity actually matched.
+      def update(entity, property, fun) when is_reference(entity) and is_function(fun, 1),
+        do: Genesis.Component.__update__(:entities, __MODULE__, entity, property, fun)
 
       @doc """
       Returns all components of the given type.
@@ -142,7 +150,7 @@ defmodule Genesis.Component do
           iex> Health.get(entity_1)
           %Health{current: 100}
       """
-      def get(entity, default \\ nil),
+      def get(entity, default \\ nil) when is_reference(entity),
         do: Genesis.Query.__get__(:entities, __MODULE__, entity, default)
 
       @doc """
@@ -153,8 +161,8 @@ defmodule Genesis.Component do
           iex> Moniker.match(name: "Tripida")
           [{entity_1, %Moniker{name: "Tripida"}}]
       """
-      def match(pairs),
-        do: Genesis.Query.__match__(:entities, __MODULE__, pairs)
+      def match(properties) when is_non_empty_pairs(properties),
+        do: Genesis.Query.__match__(:entities, __MODULE__, properties)
 
       @doc """
       Returns all components that have the given property with a value greater than or equal to the given minimum.
@@ -164,8 +172,8 @@ defmodule Genesis.Component do
           iex> Health.at_least(:current, 50)
           [{entity_1, %Health{current: 75}}]
       """
-      def at_least(prop, value) when is_integer_prop(prop) and is_integer(value),
-        do: Genesis.Query.__at_least__(:entities, __MODULE__, prop, value)
+      def at_least(property, value) when is_integer_property(property) and is_integer(value),
+        do: Genesis.Query.__at_least__(:entities, __MODULE__, property, value)
 
       @doc """
       Returns all components that have the given property with a value less than or equal to the given maximum.
@@ -175,8 +183,8 @@ defmodule Genesis.Component do
           iex> Health.at_most(:current, 50)
           [{entity_1, %Health{current: 25}}]
       """
-      def at_most(prop, value) when is_integer_prop(prop) and is_integer(value),
-        do: Genesis.Query.__at_most__(:entities, __MODULE__, prop, value)
+      def at_most(property, value) when is_integer_property(property) and is_integer(value),
+        do: Genesis.Query.__at_most__(:entities, __MODULE__, property, value)
 
       @doc """
       Returns all components that have the given property with a value between the given minimum and maximum (inclusive).
@@ -186,8 +194,16 @@ defmodule Genesis.Component do
           iex> Health.between(:current, 50, 100)
           [{entity_1, %Health{current: 75}}]
       """
-      def between(prop, min, max) when is_integer_prop(prop) and is_min_max(min, max),
-        do: Genesis.Query.__between__(:entities, __MODULE__, prop, min, max)
+      def between(property, min, max)
+          when is_integer_property(property) and is_min_max(min, max),
+          do: Genesis.Query.__between__(:entities, __MODULE__, property, min, max)
+
+      @doc """
+      Checks if an entity exists in the entities registry.
+      Returns `true` if found, or `false` otherwise.
+      """
+      def exists?(entity_or_name) when is_handle(entity_or_name),
+        do: Genesis.Query.__exists__(:entities, entity_or_name)
 
       if @events == [] and Module.defines?(unquote(env.module), {:handle_event, 2}) do
         raise CompileError,
@@ -202,7 +218,7 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def __props__(properties, type) do
+  def __properties__(properties, type) do
     Enum.reduce(properties, [], fn
       {name, ^type, _opts}, acc -> [name | acc]
       {_name, _type, _opts}, acc -> acc

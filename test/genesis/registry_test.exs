@@ -59,6 +59,21 @@ defmodule Genesis.RegistryTest do
     end
   end
 
+  describe "exists?" do
+    test "checks entity existence by reference and name", %{registry: registry} do
+      {:ok, entity1} = Registry.create(registry, name: "Foo")
+      {:ok, entity2} = Registry.create(registry, name: :Bar)
+
+      assert Registry.exists?(registry, entity1)
+      assert Registry.exists?(registry, "Foo")
+      assert Registry.exists?(registry, entity2)
+      assert Registry.exists?(registry, :Bar)
+      refute Registry.exists?(registry, make_ref())
+      refute Registry.exists?(registry, "NonExistent")
+      refute Registry.exists?(registry, :non_existent)
+    end
+  end
+
   describe "fetch" do
     test "returns nil for non-existent entity", %{registry: registry} do
       assert nil == Registry.fetch(registry, make_ref())

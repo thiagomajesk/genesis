@@ -61,7 +61,7 @@ defmodule Genesis.ValueTest do
       end
     end
 
-    test "rejects format on non-string props" do
+    test "rejects format on non-string properties" do
       error_msg = ~r/:format option can only be used with properties of type :string/
 
       assert_raise CompileError, error_msg, fn ->
@@ -121,7 +121,7 @@ defmodule Genesis.ValueTest do
   end
 
   describe "cast/2" do
-    test "rejects unkown props" do
+    test "rejects unknown properties" do
       name = :test_string
       props = [{name, :string, []}]
 

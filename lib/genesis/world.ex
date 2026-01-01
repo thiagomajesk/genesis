@@ -35,9 +35,10 @@ defmodule Genesis.World do
   @doc """
   Creates a new entity from a prefab.
   The prefab must be registered before it can be used.
+  Optionally, you can provide overrides to modify component properties.
   """
-  def create(world, name) do
-    GenServer.call(world, {:create, name})
+  def create(world, name, overrides \\ %{}) do
+    GenServer.call(world, {:create, name, overrides})
   end
 
   @doc """
@@ -171,27 +172,28 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:create, name}, _from, state) do
+  def handle_call({:create, name, overrides}, _from, state) do
     case Genesis.Registry.lookup(:prefabs, name) do
       nil ->
         {:reply, :noop, state}
 
-      {prefab, _name, _metadata} ->
-        entity = Genesis.Manager.entity!(%{world: self()})
+      {prefab, _name, metadata} ->
+        metadata = Map.merge(metadata, %{world: self()})
 
-        case Genesis.Registry.fetch(:prefabs, prefab) do
-          nil ->
-            {:reply, :noop, state}
+        options = [
+          source: :prefabs,
+          target: :entities,
+          metadata: metadata,
+          overrides: overrides
+        ]
 
-          {_entity, components} ->
-            case Genesis.Registry.assign(:entities, entity, components) do
-              :ok ->
-                entities = MapSet.put(state.entities, entity)
-                {:reply, entity, %{state | entities: entities}}
+        case Genesis.Manager.clone!(prefab, options) do
+          {:ok, clone} ->
+            entities = MapSet.put(state.entities, clone)
+            {:reply, clone, %{state | entities: entities}}
 
-              {:error, reason} ->
-                {:reply, {:error, reason}, state}
-            end
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
         end
     end
   end
@@ -205,12 +207,10 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:clone, entity}, _from, state) do
-    components = fetch(entity)
+    options = [source: :entities, metadata: %{world: self()}]
 
-    clone = Genesis.Manager.entity!(%{world: self()})
-
-    case Genesis.Registry.assign(:entities, clone, components) do
-      :ok ->
+    case Genesis.Manager.clone!(entity, options) do
+      {:ok, clone} ->
         entities = MapSet.put(state.entities, clone)
         {:reply, clone, %{state | entities: entities}}
 

@@ -1,4 +1,8 @@
 defmodule Genesis.Manager do
+  @moduledoc """
+  Manages the registration and lifecycle of components and prefabs.
+  """
+
   @doc """
   Creates a new entity in the registry.
 
@@ -9,6 +13,46 @@ defmodule Genesis.Manager do
     case Genesis.Registry.create(:entities, metadata: metadata) do
       {:ok, entity} -> entity
       {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Clones an entity or named prefab from a specified registry into the target registry.
+  """
+  def clone!(entity, opts \\ []) when is_reference(entity) do
+    metadata = Keyword.get(opts, :metadata, %{})
+
+    if not is_map(metadata) do
+      raise ArgumentError, ":metadata option must be a map"
+    end
+
+    overrides = Keyword.get(opts, :overrides, %{})
+
+    if not is_map(overrides) do
+      raise ArgumentError, ":overrides option must be a map"
+    end
+
+    # The common use-case is to clone within the same registry.
+    source_registry = Keyword.fetch!(opts, :source)
+    target_registry = Keyword.get(opts, :target, source_registry)
+
+    case Genesis.Registry.fetch(source_registry, entity) do
+      nil ->
+        :noop
+
+      {_entity, components} ->
+        clone = entity!(metadata)
+
+        original = Genesis.Utils.extract_properties(components)
+        merged = Genesis.Utils.merge_components(original, overrides)
+
+        case Genesis.Registry.assign(target_registry, clone, merged) do
+          :ok ->
+            {:ok, clone}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
     end
   end
 

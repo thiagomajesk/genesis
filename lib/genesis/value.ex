@@ -53,18 +53,18 @@ defmodule Genesis.Value do
   @doc false
   def cast(_attrs, []), do: %{}
 
-  def cast(attrs, props) do
+  def cast(attrs, properties) do
     attrs
     |> normalize()
-    |> merge_defaults(props)
-    |> cast_properties(props)
+    |> merge_defaults(properties)
+    |> cast_properties(properties)
   end
 
   @doc false
   def __defaults__([]), do: []
 
-  def __defaults__(props) do
-    Enum.map(props, fn {name, _type, opts} ->
+  def __defaults__(properties) do
+    Enum.map(properties, fn {name, _type, opts} ->
       {name, Keyword.get(opts, :default)}
     end)
   end
@@ -77,7 +77,7 @@ defmodule Genesis.Value do
   @doc false
   def __prop__(module, name, type, opts, file, line) do
     #
-    # Prop keys validation
+    # Property keys validation
     #
     if not is_atom(name) do
       compile_error!(
@@ -89,7 +89,7 @@ defmodule Genesis.Value do
     end
 
     #
-    # Duplicated props validation
+    # Duplicated property validation
     #
     properties = Module.get_attribute(module, :properties)
 
@@ -247,7 +247,7 @@ defmodule Genesis.Value do
     end
 
     #
-    # Prop type validation
+    # Property type validation
     #
     cond do
       type in @valid_types ->
@@ -296,15 +296,15 @@ defmodule Genesis.Value do
     end)
   end
 
-  defp merge_defaults(attrs, props) do
-    props
+  defp merge_defaults(attrs, properties) do
+    properties
     |> __defaults__()
     |> normalize()
     |> Map.merge(attrs)
   end
 
-  defp cast_properties(attrs, props) do
-    Map.new(props, fn
+  defp cast_properties(attrs, properties) do
+    Map.new(properties, fn
       {name, type, opts} when type in @valid_types ->
         value = fetch_value(attrs, {name, type, opts})
         cast_property_value(value, {name, type, opts})
@@ -360,10 +360,10 @@ defmodule Genesis.Value do
 
     if atomize? and values == [] do
       raise ArgumentError,
-            "The prop #{inspect(name)} needs to provide values when casting strings"
+            "The property #{inspect(name)} needs to provide values when casting strings"
     end
 
-    # In case of atom props, we append string versions of the atoms to the allowed values
+    # In case of atom properties, we append string versions of the atoms to the allowed values
     stringified = Stream.map(values, &to_string/1)
     allowed_values = if atomize?, do: Enum.concat(values, stringified), else: values
 

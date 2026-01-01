@@ -63,10 +63,10 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def __match__(registry, component_type, pairs) do
+  def __match__(registry, component_type, properties) do
     guards =
-      Enum.map(pairs, fn {key, value} ->
-        {:==, {:map_get, key, :"$2"}, value}
+      Enum.map(properties, fn {property, value} ->
+        {:==, {:map_get, property, :"$2"}, value}
       end)
 
     match_spec = [
@@ -81,11 +81,11 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def __at_least__(registry, component_type, prop, value) do
+  def __at_least__(registry, component_type, property, value) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
-        [{:is_map, :"$2"}, {:>=, {:map_get, prop, :"$2"}, value}],
+        [{:is_map, :"$2"}, {:>=, {:map_get, property, :"$2"}, value}],
         [{{:"$1", :"$2"}}]
       }
     ]
@@ -94,11 +94,11 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def __at_most__(registry, component_type, prop, value) do
+  def __at_most__(registry, component_type, property, value) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
-        [{:is_map, :"$2"}, {:"=<", {:map_get, prop, :"$2"}, value}],
+        [{:is_map, :"$2"}, {:"=<", {:map_get, property, :"$2"}, value}],
         [{{:"$1", :"$2"}}]
       }
     ]
@@ -107,14 +107,14 @@ defmodule Genesis.Query do
   end
 
   @doc false
-  def __between__(registry, component_type, prop, min, max) do
+  def __between__(registry, component_type, property, min, max) do
     match_spec = [
       {
         {:_, :"$1", component_type, :"$2"},
         [
           {:is_map, :"$2"},
-          {:"=<", {:map_get, prop, :"$2"}, max},
-          {:>=, {:map_get, prop, :"$2"}, min}
+          {:"=<", {:map_get, property, :"$2"}, max},
+          {:>=, {:map_get, property, :"$2"}, min}
         ],
         [{{:"$1", :"$2"}}]
       }
@@ -150,6 +150,11 @@ defmodule Genesis.Query do
       [component] -> component
       [] -> default
     end
+  end
+
+  @doc false
+  def __exists__(registry, entity_or_name) do
+    Genesis.Registry.exists?(registry, entity_or_name)
   end
 
   defp apply_filter(stream, _filter, nil), do: stream

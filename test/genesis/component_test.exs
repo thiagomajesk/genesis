@@ -77,6 +77,20 @@ defmodule Genesis.ComponentTest do
     refute Health.get(entity)
   end
 
+  describe "exists?/1" do
+    test "checks if entity exists by reference and name" do
+      {:ok, entity1} = Registry.create(:entities, name: "Entity")
+      {:ok, entity2} = Registry.create(:entities, name: :Other)
+
+      assert Health.exists?(entity1)
+      assert Health.exists?("Entity")
+      assert Position.exists?(entity2)
+      assert Position.exists?(:Other)
+      refute Health.exists?(make_ref())
+      refute Position.exists?("NonExistent")
+    end
+  end
+
   test "update/2" do
     entity = Manager.entity!()
 

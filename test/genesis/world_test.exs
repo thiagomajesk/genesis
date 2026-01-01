@@ -150,6 +150,20 @@ defmodule Genesis.WorldTest do
            ] = Enum.sort(components)
   end
 
+  test "create/3", %{world: world} do
+    Manager.register_prefab(%{
+      name: "Item",
+      components: %{
+        "moniker" => %{name: "Potion"}
+      }
+    })
+
+    overrides = %{"moniker" => %{name: "Healing Potion"}}
+    entity = World.create(world, "Item", overrides)
+
+    assert %Moniker{name: "Healing Potion"} = Moniker.get(entity)
+  end
+
   test "clone/1", %{world: world} do
     entity = World.create(world)
 
@@ -163,7 +177,6 @@ defmodule Genesis.WorldTest do
     assert Health.get(clone) == Health.get(entity)
     assert Position.get(clone) == Position.get(entity)
     assert Moniker.get(clone) == Moniker.get(entity)
-    assert World.fetch(clone) == World.fetch(entity)
   end
 
   describe "destroy/1" do

@@ -36,6 +36,21 @@ defmodule Genesis.PrefabTest do
   end
 
   describe "queries" do
+    test "exists?/1 - checks prefab existence by reference and name" do
+      being_attrs = prefab_fixture(:being)
+      human_attrs = prefab_fixture(:human)
+
+      {:ok, {being, _, _}} = Manager.register_prefab(being_attrs)
+      {:ok, {human, _, _}} = Manager.register_prefab(human_attrs)
+
+      assert Prefab.exists?(being)
+      assert Prefab.exists?("Being")
+      assert Prefab.exists?(human)
+      assert Prefab.exists?("Human")
+      refute Prefab.exists?(make_ref())
+      refute Prefab.exists?("NonExistent")
+    end
+
     test "get/1" do
       being_attrs = prefab_fixture(:being)
       {:ok, {being, _, _}} = Manager.register_prefab(being_attrs)
