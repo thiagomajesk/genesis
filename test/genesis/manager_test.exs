@@ -11,7 +11,6 @@ defmodule Genesis.ManagerTest do
   alias Genesis.Components.Selectable
 
   setup do
-    :ok = Manager.init()
     on_exit(fn -> Manager.reset() end)
   end
 

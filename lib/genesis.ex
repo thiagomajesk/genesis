@@ -95,9 +95,11 @@ defmodule Genesis do
 
   @impl true
   def start(_type, _args) do
-    :ok = Genesis.Manager.init()
+    children = [
+      Genesis.Manager,
+      {Task.Supervisor, name: Genesis.TaskSupervisor}
+    ]
 
-    children = [{Task.Supervisor, name: Genesis.TaskSupervisor}]
     Supervisor.start_link(children, strategy: :one_for_one, name: Genesis.Supervisor)
   end
 end

@@ -3,6 +3,8 @@ defmodule Genesis.Manager do
   Manages the registration and lifecycle of components and prefabs.
   """
 
+  use GenServer
+
   @doc """
   Creates a new entity in the registry.
 
@@ -108,23 +110,12 @@ defmodule Genesis.Manager do
   @doc """
   Returns all event handlers registered in the manager.
   """
-  def handlers do
-    Enum.reduce(:persistent_term.get(), %{}, fn
-      {{:genesis, :events, event}, handlers}, acc ->
-        Map.put(acc, event, Enum.reverse(handlers))
-
-      {_other_key, _other_value}, acc ->
-        acc
-    end)
-  end
+  def handlers, do: events_lookup_get()
 
   @doc """
   Returns the handlers registered for a specific event.
   """
-  def handlers(event) when is_atom(event) do
-    key = {:genesis, :events, event}
-    Enum.reverse(:persistent_term.get(key, []))
-  end
+  def handlers(event) when is_atom(event), do: events_lookup_get(event)
 
   @doc """
   Registers a component module with an optional custom alias.
@@ -136,18 +127,8 @@ defmodule Genesis.Manager do
       iex> Genesis.Manager.register_components([{"prefix::health", Health}])
   """
   def register_components(components) when is_list(components) do
-    registered =
-      components
-      |> Enum.map(&register_component!/1)
-      |> Enum.reduce(%{}, fn {_entity, metadata}, lookup ->
-        Enum.reduce(metadata.events, lookup, fn event, lookup ->
-          Map.update(lookup, event, [metadata.type], &[metadata.type | &1])
-        end)
-      end)
-
-    Enum.each(registered, fn {event, component_types} ->
-      :persistent_term.put({:genesis, :events, event}, component_types)
-    end)
+    registered = Enum.map(components, &register_component!/1)
+    events_lookup_merge(build_events_lookup(registered))
   end
 
   @doc """
@@ -170,23 +151,6 @@ defmodule Genesis.Manager do
           {:ok, {entity, metadata, components}}
         end
     end
-  end
-
-  @doc false
-  def init do
-    with :ok <- Genesis.Registry.init(:prefabs),
-         :ok <- Genesis.Registry.init(:entities),
-         :ok <- Genesis.Registry.init(:components),
-         do: :ok
-  end
-
-  @doc false
-  def reset() do
-    with :ok <- clear_event_lookup(),
-         :ok <- Genesis.Registry.clear(:prefabs),
-         :ok <- Genesis.Registry.clear(:entities),
-         :ok <- Genesis.Registry.clear(:components),
-         do: :ok
   end
 
   def register_component!(component_type) when is_atom(component_type) do
@@ -217,11 +181,51 @@ defmodule Genesis.Manager do
     end
   end
 
-  defp clear_event_lookup() do
-    events = Map.keys(handlers())
+  @doc false
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
 
-    Enum.each(events, fn event ->
-      :persistent_term.erase({:genesis, :events, event})
+  @doc false
+  def reset do
+    GenServer.call(__MODULE__, :reset)
+  end
+
+  @impl true
+  def init(_opts) do
+    registries = [:prefabs, :entities, :components]
+    Enum.each(registries, &Genesis.Registry.init/1)
+
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_call(:reset, _from, state) do
+    events_lookup_clear()
+
+    registries = [:prefabs, :entities, :components]
+    Enum.each(registries, &Genesis.Registry.clear/1)
+
+    {:reply, :ok, state}
+  end
+
+  defp events_lookup_key, do: {__MODULE__, :events}
+
+  defp events_lookup_merge(events) do
+    updated = Map.merge(events_lookup_get(), events)
+    :persistent_term.put(events_lookup_key(), updated)
+  end
+
+  defp build_events_lookup(registered) do
+    Enum.reduce(registered, %{}, fn {_entity, metadata}, lookup ->
+      Enum.reduce(metadata.events, lookup, fn event, lookup ->
+        # Store events in the correct by concateneting the list instead of prepending
+        Map.update(lookup, event, [metadata.type], &(&1 ++ [metadata.type]))
+      end)
     end)
   end
+
+  defp events_lookup_get(event), do: Map.get(events_lookup_get(), event, [])
+  defp events_lookup_get, do: :persistent_term.get(events_lookup_key(), %{})
+  defp events_lookup_clear, do: :persistent_term.erase(events_lookup_key())
 end
