@@ -17,6 +17,8 @@ defmodule Genesis.Entity do
 
   defstruct [:node, :context, :world, :ref, :hash, :name, :parent]
 
+  alias __MODULE__
+
   @doc """
   Creates a new entity.
 
@@ -36,7 +38,7 @@ defmodule Genesis.Entity do
     identity = {node(), world, context, ref}
     hash = :crypto.hash(:sha, :erlang.term_to_binary(identity))
 
-    %__MODULE__{
+    %Entity{
       ref: ref,
       hash: hash,
       name: name,
@@ -46,6 +48,31 @@ defmodule Genesis.Entity do
       context: context
     }
   end
+
+  @doc """
+  Returns true when two entities represent the same identity.
+  """
+  def equal?(%Entity{hash: h1}, %Entity{hash: h2}), do: h1 == h2
+
+  @doc """
+  Returns true when the entity was created on this node.
+  """
+  def local?(%Entity{node: node}), do: node == node()
+
+  @doc """
+  Returns true when two entities share the same context.
+  """
+  def colocated?(%Entity{context: c1}, %Entity{context: c2}), do: c1 == c2
+
+  @doc """
+  Returns true when the entity has a name.
+  """
+  def named?(%Entity{name: name}), do: not is_nil(name)
+
+  @doc """
+  Returns true when the entity was derived from another entity.
+  """
+  def derived?(%Entity{parent: parent}), do: not is_nil(parent)
 end
 
 defimpl Inspect, for: Genesis.Entity do
