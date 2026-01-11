@@ -323,6 +323,26 @@ defmodule Genesis.Context do
   end
 
   @doc """
+  Returns a list of entities that are direct children of the given entity.
+
+  ## Examples
+
+      iex> Genesis.Context.children_of(context, entity_1)
+      [entity_2, entity_3, entity_4, ...]
+  """
+  def children_of(context, %Genesis.Entity{} = entity) do
+    mtable = table!(context, :metadata)
+
+    :ets.select(mtable, [
+      {
+        {:"$1", :"$2", :"$3"},
+        [{:==, {:map_get, :parent, :"$1"}, entity}],
+        [:"$1"]
+      }
+    ])
+  end
+
+  @doc """
   Returns a list of entities that have all the components specified in the list.
 
   ## Examples

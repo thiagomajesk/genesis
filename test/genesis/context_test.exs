@@ -403,6 +403,35 @@ defmodule Genesis.ContextTest do
       assert [] = Context.between(context, Health, :invalid, 5, 15)
     end
 
+    test "children_of/2", %{context: context} do
+      parent_1 = Context.create(context)
+      parent_1_child_1 = Context.create(context, parent: parent_1)
+      parent_1_child_2 = Context.create(context, parent: parent_1)
+
+      parent_2 = Context.create(context)
+      parent_2_child_1 = Context.create(context, parent: parent_2)
+      parent_2_child_2 = Context.create(context, parent: parent_2)
+
+      children_1 = MapSet.new(Context.children_of(context, parent_1))
+      children_2 = MapSet.new(Context.children_of(context, parent_2))
+
+      # Parent 1's has only its children
+      assert MapSet.member?(children_1, parent_1_child_1)
+      assert MapSet.member?(children_1, parent_1_child_2)
+
+      # Parent 1 does not have Parent 2's children
+      refute MapSet.member?(children_1, parent_2_child_1)
+      refute MapSet.member?(children_1, parent_2_child_2)
+
+      # Parent 2's has only its children
+      assert MapSet.member?(children_2, parent_2_child_1)
+      assert MapSet.member?(children_2, parent_2_child_2)
+
+      # Parent 2 does not have Parent 1's children
+      refute MapSet.member?(children_2, parent_1_child_1)
+      refute MapSet.member?(children_2, parent_1_child_2)
+    end
+
     test "match/1", %{context: context} do
       entity_1 = Context.create(context)
       entity_2 = Context.create(context)
