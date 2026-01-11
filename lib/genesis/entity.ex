@@ -78,15 +78,34 @@ end
 defimpl Inspect, for: Genesis.Entity do
   import Inspect.Algebra
 
-  def inspect(%{hash: hash, name: nil}, _opts) do
-    concat(["#Entity<", format_hash(hash), ">"])
+  def inspect(entity, opts) do
+    name = display_name(entity, opts)
+    hierarchy = display_hierarchy(entity, opts)
+    concat(["#Entity<", name, hierarchy, ">"])
   end
 
-  def inspect(%{hash: hash, name: name, parent: parent}, _opts) do
-    concat(["#Entity<", space(format_hash(hash), format_name(name, parent)), ">"])
+  defp display_hierarchy(entity, opts) do
+    hierarchy = format_hierarchy(entity.parent, opts)
+
+    if opts.pretty,
+      do: concat("@", Enum.join(hierarchy, "/")),
+      else: concat("@", to_string(length(hierarchy)))
   end
 
-  defp format_name(name, nil), do: concat(["(", name, ")"])
-  defp format_name(name, parent), do: concat(["(", name, "/", parent, ")"])
-  defp format_hash(hash), do: binary_part(Base.encode16(hash, case: :lower), 0, 10)
+  defp format_hierarchy(nil, _opts), do: []
+
+  defp format_hierarchy(entity, opts),
+    do: [display_name(entity, opts) | format_hierarchy(entity.parent, opts)]
+
+  defp display_name(%{name: nil} = entity, _opts), do: format_hash(entity.hash)
+  defp display_name(entity, opts), do: format_name(entity.name, opts)
+
+  defp format_name(name, opts), do: truncate(name, opts)
+  defp format_hash(hash), do: binary_part(Base.encode16(hash, case: :lower), 0, 7)
+
+  defp truncate(string, opts) do
+    if String.length(string) >= opts.limit,
+      do: String.slice(string, 0, opts.limit) <> "...",
+      else: string
+  end
 end
