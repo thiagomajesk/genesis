@@ -37,7 +37,7 @@ defmodule Genesis.ComponentTest do
 
   describe "attach/2" do
     test "with a map", %{context: context} do
-      entity = Context.create(context, context: context)
+      entity = Context.create(context)
 
       Health.attach(entity, %{current: 100})
 
@@ -45,7 +45,7 @@ defmodule Genesis.ComponentTest do
     end
 
     test "with a keyword list", %{context: context} do
-      entity = Context.create(context, context: context)
+      entity = Context.create(context)
 
       Health.attach(entity, current: 100)
 
@@ -53,7 +53,7 @@ defmodule Genesis.ComponentTest do
     end
 
     test "with a struct", %{context: context} do
-      entity = Context.create(context, context: context)
+      entity = Context.create(context)
 
       Health.attach(entity, %Health{current: 100})
 
@@ -61,7 +61,7 @@ defmodule Genesis.ComponentTest do
     end
 
     test "component is not attached twice", %{context: context} do
-      entity = Context.create(context, context: context)
+      entity = Context.create(context)
 
       Health.attach(entity, current: 50)
 
@@ -72,7 +72,7 @@ defmodule Genesis.ComponentTest do
   end
 
   test "remove/1", %{context: context} do
-    entity = Context.create(context, context: context)
+    entity = Context.create(context)
 
     Health.attach(entity, current: 100)
     Moniker.attach(entity, name: "Entity")
@@ -83,7 +83,7 @@ defmodule Genesis.ComponentTest do
   end
 
   test "update/2", %{context: context} do
-    entity = Context.create(context, context: context)
+    entity = Context.create(context)
 
     Health.attach(entity, current: 100)
 
@@ -94,7 +94,7 @@ defmodule Genesis.ComponentTest do
   end
 
   test "update/3", %{context: context} do
-    entity = Context.create(context, context: context)
+    entity = Context.create(context)
 
     Health.attach(entity, current: 100)
 

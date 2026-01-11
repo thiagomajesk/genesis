@@ -40,6 +40,7 @@ defmodule Genesis.Context do
     * `:metadata` - an optional map of metadata to associate with the entity
 
   See `Genesis.Entity.new/1` for additional options.
+  Note that the created entity has its context set automatically.
   """
   def create(context, opts \\ []) do
     GenServer.call(context, {:create, opts})
@@ -458,7 +459,7 @@ defmodule Genesis.Context do
     default_metadata = %{created_at: System.system_time()}
     updated_metadata = Map.merge(default_metadata, metadata)
 
-    entity = Genesis.Entity.new(opts)
+    entity = Genesis.Entity.new(Keyword.put(opts, :context, self()))
 
     :ets.insert(state.tables.mtable, {entity, MapSet.new(), updated_metadata})
 

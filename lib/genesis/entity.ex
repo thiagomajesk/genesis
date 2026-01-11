@@ -12,7 +12,7 @@ defmodule Genesis.Entity do
           ref: reference(),
           hash: binary(),
           name: binary() | nil,
-          parent: binary() | nil
+          parent: t() | nil
         }
 
   defstruct [:node, :context, :world, :ref, :hash, :name, :parent]
@@ -26,7 +26,7 @@ defmodule Genesis.Entity do
     * `:context` - the context PID where the entity lives (required)
     * `:world` - the world GenServer PID if entity belongs to a world (optional)
     * `:name` - an optional name for the entity (optional)
-    * `:parent` - the parent entity name this was cloned from (optional)
+    * `:parent` - the parent entity this was cloned from (optional)
   """
   def new(opts) do
     ref = make_ref()

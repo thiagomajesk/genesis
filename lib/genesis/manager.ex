@@ -7,36 +7,33 @@ defmodule Genesis.Manager do
 
   @doc """
   Clones an entity or prefab from a specified context into the target context.
+
+  ## Options
+
+    * `:source` - the source context PID (required)
+    * `:target` - the target context PID (defaults to source context)
+    * `:overrides` - a map of component properties to override in the cloned entity
+
+  See `Genesis.Context.create/2` for additional options.
   """
   def clone!(%Genesis.Entity{} = entity, opts \\ []) do
-    metadata = Keyword.get(opts, :metadata, %{})
-
-    if not is_map(metadata) do
-      raise ArgumentError, ":metadata option must be a map"
-    end
-
-    overrides = Keyword.get(opts, :overrides, %{})
+    {overrides, opts} = Keyword.pop(opts, :overrides, %{})
 
     if not is_map(overrides) do
       raise ArgumentError, ":overrides option must be a map"
     end
 
     # The common use-case is to clone within the same context.
-    source_context = Keyword.fetch!(opts, :source)
-    target_context = Keyword.get(opts, :target, source_context)
+    {source_context, opts} = Keyword.pop!(opts, :source)
+    {target_context, opts} = Keyword.pop(opts, :target, source_context)
 
     case Genesis.Context.fetch(source_context, entity) do
       nil ->
         :noop
 
       {_entity, components} ->
-        clone =
-          Genesis.Context.create(target_context,
-            name: nil,
-            parent: entity.name,
-            metadata: metadata,
-            context: target_context
-          )
+        create_opts = Keyword.put(opts, :parent, entity)
+        clone = Genesis.Context.create(target_context, create_opts)
 
         original = Genesis.Utils.extract_properties(components)
         merged = Genesis.Utils.merge_components(original, overrides)
@@ -131,8 +128,7 @@ defmodule Genesis.Manager do
           Genesis.Context.create(
             Genesis.Prefabs,
             name: name,
-            metadata: metadata,
-            context: Genesis.Prefabs
+            metadata: metadata
           )
 
         with :ok <- Genesis.Context.assign(Genesis.Prefabs, entity, components),
@@ -170,8 +166,7 @@ defmodule Genesis.Manager do
           Genesis.Context.create(
             Genesis.Components,
             name: name,
-            metadata: metadata,
-            context: Genesis.Components
+            metadata: metadata
           )
 
         {entity, metadata}

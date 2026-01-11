@@ -125,8 +125,8 @@ defmodule Genesis.World do
   Clones an entity with all its components.
   See `Genesis.Manager.clone!/2` for more details.
   """
-  def clone(world, entity) do
-    GenServer.call(world, {:clone, entity})
+  def clone(world, entity, opts \\ []) do
+    GenServer.call(world, {:clone, entity, opts})
   end
 
   @doc """
@@ -291,10 +291,13 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:clone, entity}, _from, state) do
-    options = [source: state.context, target: state.context]
+  def handle_call({:clone, entity, opts}, _from, state) do
+    clone_opts =
+      opts
+      |> Keyword.put(:source, state.context)
+      |> Keyword.put(:target, state.context)
 
-    case Genesis.Manager.clone!(entity, options) do
+    case Genesis.Manager.clone!(entity, clone_opts) do
       {:ok, clone} ->
         {:reply, clone, state}
 
