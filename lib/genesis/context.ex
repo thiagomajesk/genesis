@@ -53,11 +53,11 @@ defmodule Genesis.Context do
   def info(context, %Genesis.Entity{} = entity) do
     mtable = table!(context, :metadata)
 
-    case :ets.lookup(mtable, entity) do
+    case :ets.lookup(mtable, entity.hash) do
       [] ->
         nil
 
-      [{^entity, types, metadata}] ->
+      [{_key, _entity, types, metadata}] ->
         {entity, types, metadata}
     end
   end
@@ -128,9 +128,9 @@ defmodule Genesis.Context do
 
     match_spec = [
       {
-        {:"$1", :"$2", :"$3"},
-        [{:==, {:map_get, :name, :"$1"}, name}],
-        [{{:"$1", :"$2", :"$3"}}]
+        {:"$1", :"$2", :"$3", :"$4"},
+        [{:==, {:map_get, :name, :"$2"}, name}],
+        [{{:"$2", :"$3", :"$4"}}]
       }
     ]
 
@@ -150,7 +150,7 @@ defmodule Genesis.Context do
   def exists?(context, entity_or_name)
 
   def exists?(context, %Genesis.Entity{} = entity) do
-    :ets.member(table!(context, :metadata), entity)
+    :ets.member(table!(context, :metadata), entity.hash)
   end
 
   def exists?(context, name) when is_binary(name) do
@@ -171,12 +171,12 @@ defmodule Genesis.Context do
     mtable = table!(context, :metadata)
     ctable = table!(context, :components)
 
-    case :ets.lookup(mtable, entity) do
+    case :ets.lookup(mtable, entity.hash) do
       [] ->
         nil
 
-      [{^entity, _types, _metadata}] ->
-        match_spec = [{{entity, :_, :"$1"}, [], [:"$1"]}]
+      [{_key, _entity, _types, _metadata}] ->
+        match_spec = [{{entity.hash, :_, :_, :"$1"}, [], [:"$1"]}]
         {entity, :ets.select(ctable, match_spec)}
     end
   end
@@ -195,9 +195,9 @@ defmodule Genesis.Context do
 
     :ets.select(ctable, [
       {
-        {:"$1", component_type, :"$2"},
+        {:"$1", :"$2", component_type, :"$3"},
         [],
-        [{{:"$1", :"$2"}}]
+        [{{:"$2", :"$3"}}]
       }
     ])
   end
@@ -217,7 +217,7 @@ defmodule Genesis.Context do
 
     match_spec = [
       {
-        {entity, component_type, :"$1"},
+        {entity.hash, :_, component_type, :"$1"},
         [],
         [:"$1"]
       }
@@ -243,14 +243,14 @@ defmodule Genesis.Context do
 
     guards =
       Enum.map(properties, fn {property, value} ->
-        {:==, {:map_get, property, :"$2"}, value}
+        {:==, {:map_get, property, :"$3"}, value}
       end)
 
     :ets.select(ctable, [
       {
-        {:"$1", component_type, :"$2"},
-        [{:is_map, :"$2"} | guards],
-        [{{:"$1", :"$2"}}]
+        {:"$1", :"$2", component_type, :"$3"},
+        [{:is_map, :"$3"} | guards],
+        [{{:"$2", :"$3"}}]
       }
     ])
   end
@@ -269,9 +269,9 @@ defmodule Genesis.Context do
 
     :ets.select(ctable, [
       {
-        {:"$1", component_type, :"$2"},
-        [{:is_map, :"$2"}, {:>=, {:map_get, property, :"$2"}, value}],
-        [{{:"$1", :"$2"}}]
+        {:"$1", :"$2", component_type, :"$3"},
+        [{:is_map, :"$3"}, {:>=, {:map_get, property, :"$3"}, value}],
+        [{{:"$2", :"$3"}}]
       }
     ])
   end
@@ -290,9 +290,9 @@ defmodule Genesis.Context do
 
     :ets.select(ctable, [
       {
-        {:"$1", component_type, :"$2"},
-        [{:is_map, :"$2"}, {:"=<", {:map_get, property, :"$2"}, value}],
-        [{{:"$1", :"$2"}}]
+        {:"$1", :"$2", component_type, :"$3"},
+        [{:is_map, :"$3"}, {:"=<", {:map_get, property, :"$3"}, value}],
+        [{{:"$2", :"$3"}}]
       }
     ])
   end
@@ -311,13 +311,13 @@ defmodule Genesis.Context do
 
     :ets.select(ctable, [
       {
-        {:"$1", component_type, :"$2"},
+        {:"$1", :"$2", component_type, :"$3"},
         [
-          {:is_map, :"$2"},
-          {:"=<", {:map_get, property, :"$2"}, max},
-          {:>=, {:map_get, property, :"$2"}, min}
+          {:is_map, :"$3"},
+          {:"=<", {:map_get, property, :"$3"}, max},
+          {:>=, {:map_get, property, :"$3"}, min}
         ],
-        [{{:"$1", :"$2"}}]
+        [{{:"$2", :"$3"}}]
       }
     ])
   end
@@ -335,9 +335,9 @@ defmodule Genesis.Context do
 
     :ets.select(mtable, [
       {
-        {:"$1", :"$2", :"$3"},
-        [{:==, {:map_get, :parent, :"$1"}, entity}],
-        [:"$1"]
+        {:"$1", :"$2", :"$3", :"$4"},
+        [{:==, {:map_get, :hash, {:map_get, :parent, :"$2"}}, entity.hash}],
+        [:"$2"]
       }
     ])
   end
@@ -412,7 +412,9 @@ defmodule Genesis.Context do
 
     # NOTE: normalize the output of the streams so it returns {key, value} tuples
     # This is useful for applying additional transformations like grouping keys.
-    Genesis.ETS.stream(mtable, &Genesis.Utils.rekey/1)
+    Genesis.ETS.stream(mtable, fn {_key, entity, types, metadata} ->
+      {entity, {types, metadata}}
+    end)
   end
 
   @doc """
@@ -423,7 +425,9 @@ defmodule Genesis.Context do
 
     # NOTE: normalize the output of the streams so it returns {key, value} tuples
     # This is useful for applying additional transformations like grouping keys.
-    Genesis.ETS.stream(ctable, &Genesis.Utils.rekey/1)
+    Genesis.ETS.stream(ctable, fn {_key, entity, type, component} ->
+      {entity, {type, component}}
+    end)
   end
 
   @doc """
@@ -439,11 +443,11 @@ defmodule Genesis.Context do
     stream = Stream.concat(metadata_stream, components_stream)
 
     Stream.transform(stream, %{}, fn
-      {^mtable, {entity, types, metadata}}, acc ->
+      {^mtable, {_key, entity, types, metadata}}, acc ->
         counters = {0, MapSet.size(types)}
         {[], Map.put(acc, entity, {types, metadata, [], counters})}
 
-      {^ctable, {entity, _type, component}}, acc ->
+      {^ctable, {_key, entity, _type, component}}, acc ->
         case Map.fetch!(acc, entity) do
           {types, metadata, components, {mapped, expected}}
           when mapped + 1 >= expected ->
@@ -481,7 +485,7 @@ defmodule Genesis.Context do
 
     entity = Genesis.Entity.new(Keyword.put(opts, :context, self()))
 
-    :ets.insert(state.tables.mtable, {entity, MapSet.new(), updated_metadata})
+    :ets.insert(state.tables.mtable, {entity.hash, entity, MapSet.new(), updated_metadata})
 
     {:reply, entity, state}
   end
@@ -490,17 +494,17 @@ defmodule Genesis.Context do
   def handle_call({:emplace, entity, component}, _from, state) do
     type = Map.fetch!(component, :__struct__)
 
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, types, metadata}] ->
-        case :ets.match_object(state.tables.ctable, {entity, type, :_}) do
+      [{_key, _entity, types, metadata}] ->
+        case :ets.match_object(state.tables.ctable, {entity.hash, :_, type, :_}) do
           [] ->
-            :ets.insert(state.tables.ctable, {entity, type, component})
+            :ets.insert(state.tables.ctable, {entity.hash, entity, type, component})
 
             updated_types = MapSet.put(types, type)
-            :ets.insert(state.tables.mtable, {entity, updated_types, metadata})
+            :ets.insert(state.tables.mtable, {entity.hash, entity, updated_types, metadata})
 
             {:reply, :ok, state}
 
@@ -514,13 +518,13 @@ defmodule Genesis.Context do
   def handle_call({:replace, entity, new_component}, _from, state) do
     type = Map.fetch!(new_component, :__struct__)
 
-    case :ets.match_object(state.tables.ctable, {entity, type, :_}) do
+    case :ets.match_object(state.tables.ctable, {entity.hash, :_, type, :_}) do
       [] ->
         {:reply, {:error, :component_not_found}, state}
 
-      [{^entity, ^type, old_component}] ->
-        :ets.delete_object(state.tables.ctable, {entity, type, old_component})
-        :ets.insert(state.tables.ctable, {entity, type, new_component})
+      [{_key, _entity, ^type, old_component}] ->
+        :ets.delete_object(state.tables.ctable, {entity.hash, entity, type, old_component})
+        :ets.insert(state.tables.ctable, {entity.hash, entity, type, new_component})
         {:reply, :ok, state}
     end
   end
@@ -534,26 +538,26 @@ defmodule Genesis.Context do
 
   @impl true
   def handle_call({:patch, entity, new_metadata}, _from, state) do
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, types, _metadata}] ->
-        :ets.insert(state.tables.mtable, {entity, types, new_metadata})
+      [{_key, _entity, types, _metadata}] ->
+        :ets.insert(state.tables.mtable, {entity.hash, entity, types, new_metadata})
         {:reply, :ok, state}
     end
   end
 
   @impl true
   def handle_call({:erase, entity, nil}, _from, state) do
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, _types, metadata}] ->
-        :ets.delete(state.tables.ctable, entity)
+      [{_key, _entity, _types, metadata}] ->
+        :ets.delete(state.tables.ctable, entity.hash)
 
-        :ets.insert(state.tables.mtable, {entity, MapSet.new(), metadata})
+        :ets.insert(state.tables.mtable, {entity.hash, entity, MapSet.new(), metadata})
 
         {:reply, :ok, state}
     end
@@ -561,22 +565,25 @@ defmodule Genesis.Context do
 
   @impl true
   def handle_call({:erase, entity, component_type}, _from, state) do
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, types, metadata}] ->
-        matches = :ets.match_object(state.tables.ctable, {entity, component_type, :_})
+      [{_key, _entity, types, metadata}] ->
+        matches = :ets.match_object(state.tables.ctable, {entity.hash, :_, component_type, :_})
 
         case matches do
           [] ->
             {:reply, {:error, :component_not_found}, state}
 
-          [{^entity, ^component_type, component}] ->
-            :ets.delete_object(state.tables.ctable, {entity, component_type, component})
+          [{_key, _entity, ^component_type, component}] ->
+            :ets.delete_object(
+              state.tables.ctable,
+              {entity.hash, entity, component_type, component}
+            )
 
             updated_types = MapSet.delete(types, component_type)
-            :ets.insert(state.tables.mtable, {entity, updated_types, metadata})
+            :ets.insert(state.tables.mtable, {entity.hash, entity, updated_types, metadata})
 
             {:reply, :ok, state}
         end
@@ -585,14 +592,18 @@ defmodule Genesis.Context do
 
   @impl true
   def handle_call({:assign, entity, components}, _from, state) do
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, _types, metadata}] ->
-        :ets.delete(state.tables.ctable, entity)
+      [{_key, _entity, _types, metadata}] ->
+        :ets.delete(state.tables.ctable, entity.hash)
         component_types = emplace_many(state.tables.ctable, entity, components)
-        :ets.insert(state.tables.mtable, {entity, MapSet.new(component_types), metadata})
+
+        :ets.insert(
+          state.tables.mtable,
+          {entity.hash, entity, MapSet.new(component_types), metadata}
+        )
 
         {:reply, :ok, state}
     end
@@ -600,13 +611,13 @@ defmodule Genesis.Context do
 
   @impl true
   def handle_call({:destroy, entity}, _from, state) do
-    case :ets.lookup(state.tables.mtable, entity) do
+    case :ets.lookup(state.tables.mtable, entity.hash) do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{^entity, _types, _metadata}] ->
-        :ets.delete(state.tables.mtable, entity)
-        :ets.delete(state.tables.ctable, entity)
+      [{_key, _entity, _types, _metadata}] ->
+        :ets.delete(state.tables.mtable, entity.hash)
+        :ets.delete(state.tables.ctable, entity.hash)
         {:reply, :ok, state}
     end
   end
@@ -634,7 +645,7 @@ defmodule Genesis.Context do
   defp emplace_many(components_table, entity, components) do
     Enum.map(components, fn component ->
       type = Map.fetch!(component, :__struct__)
-      record = {entity, type, component}
+      record = {entity.hash, entity, type, component}
       :ets.insert(components_table, record)
       type
     end)

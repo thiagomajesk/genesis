@@ -7,10 +7,6 @@ defmodule Genesis.Utils do
            when (is_list(properties) and properties != []) or
                   (is_non_struct_map(properties) and properties != %{})
 
-  def rekey(tuple) when is_tuple(tuple) do
-    {elem(tuple, 0), Tuple.delete_at(tuple, 0)}
-  end
-
   def aliasify(module) when is_atom(module) do
     module
     |> Module.split()
