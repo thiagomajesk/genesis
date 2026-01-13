@@ -485,7 +485,7 @@ defmodule Genesis.Context do
 
     entity = Genesis.Entity.new(Keyword.put(opts, :context, self()))
 
-    :ets.insert(state.tables.mtable, {entity.hash, entity, MapSet.new(), updated_metadata})
+    ets_create(state.tables, entity, updated_metadata)
 
     {:reply, entity, state}
   end
@@ -498,14 +498,10 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{_key, _entity, types, metadata}] ->
+      [{_key, _entity, _types, _metadata}] ->
         case :ets.match_object(state.tables.ctable, {entity.hash, :_, type, :_}) do
           [] ->
-            :ets.insert(state.tables.ctable, {entity.hash, entity, type, component})
-
-            updated_types = MapSet.put(types, type)
-            :ets.insert(state.tables.mtable, {entity.hash, entity, updated_types, metadata})
-
+            ets_emplace(state.tables, entity, component)
             {:reply, :ok, state}
 
           [_component] ->
@@ -522,9 +518,8 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :component_not_found}, state}
 
-      [{_key, _entity, ^type, old_component}] ->
-        :ets.delete_object(state.tables.ctable, {entity.hash, entity, type, old_component})
-        :ets.insert(state.tables.ctable, {entity.hash, entity, type, new_component})
+      [{_key, _entity, _type, _old_component}] ->
+        ets_replace(state.tables, entity, type, new_component)
         {:reply, :ok, state}
     end
   end
@@ -542,8 +537,8 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{_key, _entity, types, _metadata}] ->
-        :ets.insert(state.tables.mtable, {entity.hash, entity, types, new_metadata})
+      [{_key, _entity, _types, _metadata}] ->
+        ets_patch(state.tables, entity, new_metadata)
         {:reply, :ok, state}
     end
   end
@@ -554,11 +549,8 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{_key, _entity, _types, metadata}] ->
-        :ets.delete(state.tables.ctable, entity.hash)
-
-        :ets.insert(state.tables.mtable, {entity.hash, entity, MapSet.new(), metadata})
-
+      [{_key, _entity, _types, _metadata}] ->
+        ets_erase_all(state.tables, entity)
         {:reply, :ok, state}
     end
   end
@@ -569,7 +561,7 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{_key, _entity, types, metadata}] ->
+      [{_key, _entity, _types, _metadata}] ->
         matches = :ets.match_object(state.tables.ctable, {entity.hash, :_, component_type, :_})
 
         case matches do
@@ -577,13 +569,7 @@ defmodule Genesis.Context do
             {:reply, {:error, :component_not_found}, state}
 
           [{_key, _entity, ^component_type, component}] ->
-            :ets.delete_object(
-              state.tables.ctable,
-              {entity.hash, entity, component_type, component}
-            )
-
-            updated_types = MapSet.delete(types, component_type)
-            :ets.insert(state.tables.mtable, {entity.hash, entity, updated_types, metadata})
+            ets_erase(state.tables, entity, component_type, component)
 
             {:reply, :ok, state}
         end
@@ -596,15 +582,8 @@ defmodule Genesis.Context do
       [] ->
         {:reply, {:error, :entity_not_found}, state}
 
-      [{_key, _entity, _types, metadata}] ->
-        :ets.delete(state.tables.ctable, entity.hash)
-        component_types = emplace_many(state.tables.ctable, entity, components)
-
-        :ets.insert(
-          state.tables.mtable,
-          {entity.hash, entity, MapSet.new(component_types), metadata}
-        )
-
+      [{_key, _entity, _types, _metadata}] ->
+        ets_assign(state.tables, entity, components)
         {:reply, :ok, state}
     end
   end
@@ -616,10 +595,65 @@ defmodule Genesis.Context do
         {:reply, {:error, :entity_not_found}, state}
 
       [{_key, _entity, _types, _metadata}] ->
-        :ets.delete(state.tables.mtable, entity.hash)
-        :ets.delete(state.tables.ctable, entity.hash)
+        ets_destroy(state.tables, entity)
         {:reply, :ok, state}
     end
+  end
+
+  defp ets_create(%{mtable: mtable}, entity, metadata) do
+    :ets.insert(mtable, {entity.hash, entity, MapSet.new(), metadata})
+  end
+
+  defp ets_emplace(%{ctable: ctable, mtable: mtable}, entity, component) do
+    type = Map.fetch!(component, :__struct__)
+    :ets.insert(ctable, {entity.hash, entity, type, component})
+
+    [{_key, _entity, types, metadata}] = :ets.lookup(mtable, entity.hash)
+    :ets.insert(mtable, {entity.hash, entity, MapSet.put(types, type), metadata})
+  end
+
+  defp ets_replace(%{ctable: ctable}, entity, type, new_component) do
+    :ets.match_delete(ctable, {entity.hash, :_, type, :_})
+    :ets.insert(ctable, {entity.hash, entity, type, new_component})
+  end
+
+  defp ets_erase(%{ctable: ctable, mtable: mtable}, entity, type, component) do
+    :ets.delete_object(ctable, {entity.hash, entity, type, component})
+
+    [{_key, _entity, types, metadata}] = :ets.lookup(mtable, entity.hash)
+    :ets.insert(mtable, {entity.hash, entity, MapSet.delete(types, type), metadata})
+  end
+
+  defp ets_erase_all(%{ctable: ctable, mtable: mtable}, entity) do
+    :ets.delete(ctable, entity.hash)
+
+    [{_key, _entity, _types, metadata}] = :ets.lookup(mtable, entity.hash)
+    :ets.insert(mtable, {entity.hash, entity, MapSet.new(), metadata})
+  end
+
+  defp ets_assign(%{ctable: ctable, mtable: mtable}, entity, components) do
+    :ets.delete(ctable, entity.hash)
+
+    component_types =
+      Enum.map(components, fn component ->
+        type = Map.fetch!(component, :__struct__)
+        record = {entity.hash, entity, type, component}
+        :ets.insert(ctable, record)
+        type
+      end)
+
+    [{_key, _entity, _types, metadata}] = :ets.lookup(mtable, entity.hash)
+    :ets.insert(mtable, {entity.hash, entity, MapSet.new(component_types), metadata})
+  end
+
+  defp ets_patch(%{mtable: mtable}, entity, new_metadata) do
+    [{_key, _entity, types, _metadata}] = :ets.lookup(mtable, entity.hash)
+    :ets.insert(mtable, {entity.hash, entity, types, new_metadata})
+  end
+
+  defp ets_destroy(%{mtable: mtable, ctable: ctable}, entity) do
+    :ets.delete(mtable, entity.hash)
+    :ets.delete(ctable, entity.hash)
   end
 
   defp apply_filter(stream, _filter, nil), do: stream
@@ -639,15 +673,6 @@ defmodule Genesis.Context do
   defp apply_filter(stream, :none, lookup) do
     Stream.filter(stream, fn {_entity, {types, _metadata}} ->
       MapSet.disjoint?(lookup, types)
-    end)
-  end
-
-  defp emplace_many(components_table, entity, components) do
-    Enum.map(components, fn component ->
-      type = Map.fetch!(component, :__struct__)
-      record = {entity.hash, entity, type, component}
-      :ets.insert(components_table, record)
-      type
     end)
   end
 
