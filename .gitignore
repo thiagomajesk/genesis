@@ -21,3 +21,6 @@ genesis-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Benchee files.
+/bench/
