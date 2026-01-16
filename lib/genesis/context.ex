@@ -2,10 +2,11 @@ defmodule Genesis.Context do
   @moduledoc """
   Provides low-level entity storage backed by ETS.
 
-  A context contains two ETS tables that are always kept in sync.
+  A context contains three ETS tables that are always kept in sync.
 
-    * `Metadata` - stores entity metadata such as name and custom data
-    * `Components` - stores components associated with entities
+    * Metadata - stores entity metadata such as name and custom data
+    * Components - stores components associated with entities
+    * Type Index - stores components indexed by type
 
   NOTE: most read operations are intentionally dirty reads for performance reasons.
   """
@@ -191,11 +192,11 @@ defmodule Genesis.Context do
       [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
   """
   def all(context, component_type) when is_atom(component_type) do
-    ctable = table!(context, :components)
+    tindex = table!(context, :type_index)
 
-    :ets.select(ctable, [
+    :ets.select(tindex, [
       {
-        {:"$1", :"$2", component_type, :"$3"},
+        {component_type, :"$1", :"$2", :"$3"},
         [],
         [{{:"$2", :"$3"}}]
       }
@@ -239,16 +240,16 @@ defmodule Genesis.Context do
   """
   def match(context, component_type, properties)
       when is_atom(component_type) and is_non_empty_pairs(properties) do
-    ctable = table!(context, :components)
+    tindex = table!(context, :type_index)
 
     guards =
       Enum.map(properties, fn {property, value} ->
         {:==, {:map_get, property, :"$3"}, value}
       end)
 
-    :ets.select(ctable, [
+    :ets.select(tindex, [
       {
-        {:"$1", :"$2", component_type, :"$3"},
+        {component_type, :"$1", :"$2", :"$3"},
         [{:is_map, :"$3"} | guards],
         [{{:"$2", :"$3"}}]
       }
@@ -265,11 +266,11 @@ defmodule Genesis.Context do
   """
   def at_least(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
-    ctable = table!(context, :components)
+    tindex = table!(context, :type_index)
 
-    :ets.select(ctable, [
+    :ets.select(tindex, [
       {
-        {:"$1", :"$2", component_type, :"$3"},
+        {component_type, :"$1", :"$2", :"$3"},
         [{:is_map, :"$3"}, {:>=, {:map_get, property, :"$3"}, value}],
         [{{:"$2", :"$3"}}]
       }
@@ -286,11 +287,11 @@ defmodule Genesis.Context do
   """
   def at_most(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
-    ctable = table!(context, :components)
+    tindex = table!(context, :type_index)
 
-    :ets.select(ctable, [
+    :ets.select(tindex, [
       {
-        {:"$1", :"$2", component_type, :"$3"},
+        {component_type, :"$1", :"$2", :"$3"},
         [{:is_map, :"$3"}, {:"=<", {:map_get, property, :"$3"}, value}],
         [{{:"$2", :"$3"}}]
       }
@@ -307,11 +308,11 @@ defmodule Genesis.Context do
   """
   def between(context, component_type, property, min, max)
       when is_atom(component_type) and is_atom(property) and is_min_max(min, max) do
-    ctable = table!(context, :components)
+    tindex = table!(context, :type_index)
 
-    :ets.select(ctable, [
+    :ets.select(tindex, [
       {
-        {:"$1", :"$2", component_type, :"$3"},
+        {component_type, :"$1", :"$2", :"$3"},
         [
           {:is_map, :"$3"},
           {:"=<", {:map_get, property, :"$3"}, max},
@@ -469,8 +470,9 @@ defmodule Genesis.Context do
     opts = [:protected, read_concurrency: true]
     mtable = :ets.new(:metadata, [:set | opts])
     ctable = :ets.new(:components, [:bag | opts])
+    tindex = :ets.new(:type_index, [:bag | opts])
 
-    tables = %{mtable: mtable, ctable: ctable}
+    tables = %{mtable: mtable, ctable: ctable, tindex: tindex}
     Registry.register(Genesis.Registry, self(), tables)
 
     {:ok, %{tables: tables}}
@@ -528,6 +530,7 @@ defmodule Genesis.Context do
   def handle_call(:clear, _from, state) do
     :ets.delete_all_objects(state.tables.mtable)
     :ets.delete_all_objects(state.tables.ctable)
+    :ets.delete_all_objects(state.tables.tindex)
     {:reply, :ok, state}
   end
 
@@ -602,46 +605,54 @@ defmodule Genesis.Context do
     :ets.insert(mtable, {entity.hash, entity, MapSet.new(), metadata})
   end
 
-  defp ets_emplace(%{ctable: ctable, mtable: mtable}, mrecord, component) do
+  defp ets_emplace(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, component) do
     type = Map.fetch!(component, :__struct__)
 
     {hash, entity, types, metadata} = mrecord
     :ets.insert(ctable, {hash, entity, type, component})
+    :ets.insert(tindex, {type, hash, entity, component})
     :ets.insert(mtable, {hash, entity, MapSet.put(types, type), metadata})
   end
 
-  defp ets_replace(%{ctable: ctable}, mrecord, type, new_component) do
+  defp ets_replace(%{ctable: ctable, tindex: tindex}, mrecord, type, new_component) do
     {hash, entity, _types, _metadata} = mrecord
     :ets.match_delete(ctable, {hash, :_, type, :_})
+    :ets.match_delete(tindex, {type, hash, :_, :_})
     :ets.insert(ctable, {hash, entity, type, new_component})
+    :ets.insert(tindex, {type, hash, entity, new_component})
   end
 
-  defp ets_erase(%{ctable: ctable, mtable: mtable}, mrecord, type, component) do
+  defp ets_erase(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, type, component) do
     {hash, entity, types, metadata} = mrecord
     :ets.delete_object(ctable, {hash, entity, type, component})
+    :ets.delete_object(tindex, {type, hash, entity, component})
     :ets.insert(mtable, {hash, entity, MapSet.delete(types, type), metadata})
   end
 
-  defp ets_erase_all(%{ctable: ctable, mtable: mtable}, mrecord) do
+  defp ets_erase_all(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord) do
     {hash, entity, _types, metadata} = mrecord
 
     :ets.delete(ctable, hash)
+    :ets.match_delete(tindex, {:_, hash, :_, :_})
     :ets.insert(mtable, {hash, entity, MapSet.new(), metadata})
   end
 
-  defp ets_assign(%{ctable: ctable, mtable: mtable}, mrecord, components) do
+  defp ets_assign(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, components) do
     {hash, entity, _types, metadata} = mrecord
 
     :ets.delete(ctable, hash)
+    :ets.match_delete(tindex, {:_, hash, :_, :_})
 
-    {records, component_types} =
-      Enum.reduce(components, {[], []}, fn component, {records, types} ->
+    {crecords, trecords, component_types} =
+      Enum.reduce(components, {[], [], []}, fn component, {crecords, trecords, types} ->
         type = Map.fetch!(component, :__struct__)
-        record = {hash, entity, type, component}
-        {[record | records], [type | types]}
+        crecord = {hash, entity, type, component}
+        trecord = {type, hash, entity, component}
+        {[crecord | crecords], [trecord | trecords], [type | types]}
       end)
 
-    :ets.insert(ctable, Enum.reverse(records))
+    :ets.insert(ctable, Enum.reverse(crecords))
+    :ets.insert(tindex, Enum.reverse(trecords))
 
     # NOTE: update the whole object because benchmarks are showing that this is still
     # fater than calling something like update_element/3 to update only component_types.
@@ -653,10 +664,11 @@ defmodule Genesis.Context do
     :ets.insert(mtable, {hash, entity, types, metadata})
   end
 
-  defp ets_destroy(%{mtable: mtable, ctable: ctable}, mrecord) do
+  defp ets_destroy(%{mtable: mtable, ctable: ctable, tindex: tindex}, mrecord) do
     {hash, _entity, _types, _metadata} = mrecord
     :ets.delete(mtable, hash)
     :ets.delete(ctable, hash)
+    :ets.match_delete(tindex, {:_, hash, :_, :_})
   end
 
   defp apply_filter(stream, _filter, nil), do: stream
@@ -694,6 +706,15 @@ defmodule Genesis.Context do
     case Registry.lookup(Genesis.Registry, pid) do
       [{^pid, %{ctable: ctable}}] -> ctable
       [] -> raise "Components table not found for context #{inspect(context)}"
+    end
+  end
+
+  defp table!(context, :type_index) do
+    pid = resolve_context(context)
+
+    case Registry.lookup(Genesis.Registry, pid) do
+      [{^pid, %{tindex: tindex}}] -> tindex
+      [] -> raise "Types index table not found for context #{inspect(context)}"
     end
   end
 
