@@ -1,3 +1,5 @@
+# Before changing this file, see the Erlang/OTP section on tables and databases
+# for best practices and optimizations tricks: https://www.erlang.org/doc/system/tablesdatabases.
 defmodule Genesis.Context do
   @moduledoc """
   Provides low-level entity storage backed by ETS.
@@ -129,9 +131,9 @@ defmodule Genesis.Context do
 
     match_spec = [
       {
-        {:"$1", :"$2", :"$3", :"$4"},
-        [{:==, {:map_get, :name, :"$2"}, name}],
-        [{{:"$2", :"$3", :"$4"}}]
+        {:_, :"$1", :"$2", :"$3"},
+        [{:==, {:map_get, :name, :"$1"}, name}],
+        [{{:"$1", :"$2", :"$3"}}]
       }
     ]
 
@@ -196,9 +198,9 @@ defmodule Genesis.Context do
 
     :ets.select(tindex, [
       {
-        {component_type, :"$1", :"$2", :"$3"},
+        {component_type, :_, :"$1", :"$2"},
         [],
-        [{{:"$2", :"$3"}}]
+        [{{:"$1", :"$2"}}]
       }
     ])
   end
@@ -244,14 +246,14 @@ defmodule Genesis.Context do
 
     guards =
       Enum.map(properties, fn {property, value} ->
-        {:==, {:map_get, property, :"$3"}, value}
+        {:==, {:map_get, property, :"$2"}, value}
       end)
 
     :ets.select(tindex, [
       {
-        {component_type, :"$1", :"$2", :"$3"},
-        [{:is_map, :"$3"} | guards],
-        [{{:"$2", :"$3"}}]
+        {component_type, :_, :"$1", :"$2"},
+        [{:is_map, :"$2"} | guards],
+        [{{:"$1", :"$2"}}]
       }
     ])
   end
@@ -270,9 +272,9 @@ defmodule Genesis.Context do
 
     :ets.select(tindex, [
       {
-        {component_type, :"$1", :"$2", :"$3"},
-        [{:is_map, :"$3"}, {:>=, {:map_get, property, :"$3"}, value}],
-        [{{:"$2", :"$3"}}]
+        {component_type, :_, :"$1", :"$2"},
+        [{:is_map, :"$2"}, {:>=, {:map_get, property, :"$2"}, value}],
+        [{{:"$1", :"$2"}}]
       }
     ])
   end
@@ -291,9 +293,9 @@ defmodule Genesis.Context do
 
     :ets.select(tindex, [
       {
-        {component_type, :"$1", :"$2", :"$3"},
-        [{:is_map, :"$3"}, {:"=<", {:map_get, property, :"$3"}, value}],
-        [{{:"$2", :"$3"}}]
+        {component_type, :_, :"$1", :"$2"},
+        [{:is_map, :"$2"}, {:"=<", {:map_get, property, :"$2"}, value}],
+        [{{:"$1", :"$2"}}]
       }
     ])
   end
@@ -312,13 +314,13 @@ defmodule Genesis.Context do
 
     :ets.select(tindex, [
       {
-        {component_type, :"$1", :"$2", :"$3"},
+        {component_type, :_, :"$1", :"$2"},
         [
-          {:is_map, :"$3"},
-          {:"=<", {:map_get, property, :"$3"}, max},
-          {:>=, {:map_get, property, :"$3"}, min}
+          {:is_map, :"$2"},
+          {:"=<", {:map_get, property, :"$2"}, max},
+          {:>=, {:map_get, property, :"$2"}, min}
         ],
-        [{{:"$2", :"$3"}}]
+        [{{:"$1", :"$2"}}]
       }
     ])
   end
@@ -336,9 +338,9 @@ defmodule Genesis.Context do
 
     :ets.select(mtable, [
       {
-        {:"$1", :"$2", :"$3", :"$4"},
-        [{:==, {:map_get, :hash, {:map_get, :parent, :"$2"}}, entity.hash}],
-        [:"$2"]
+        {:_, :"$1", :_, :_},
+        [{:==, {:map_get, :hash, {:map_get, :parent, :"$1"}}, entity.hash}],
+        [:"$1"]
       }
     ])
   end
