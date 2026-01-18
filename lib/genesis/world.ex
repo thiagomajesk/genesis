@@ -239,13 +239,7 @@ defmodule Genesis.World do
           overrides: overrides
         ]
 
-        case Genesis.Manager.clone!(prefab, options) do
-          {:ok, clone} ->
-            {:reply, clone, state}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        {:reply, Genesis.Manager.clone!(prefab, options), state}
     end
   end
 

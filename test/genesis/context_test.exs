@@ -12,14 +12,14 @@ defmodule Genesis.ContextTest do
 
   describe "create" do
     test "creates an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       assert {^entity, types, %{}} = Context.info(context, entity)
       assert MapSet.equal?(types, MapSet.new([]))
     end
 
     test "creates an entity with name", %{context: context} do
-      entity = Context.create(context, name: "Foo")
+      {:ok, entity} = Context.create(context, name: "Foo")
 
       assert {^entity, types, %{}} = Context.info(context, entity)
       assert MapSet.equal?(types, MapSet.new([]))
@@ -28,7 +28,7 @@ defmodule Genesis.ContextTest do
     test "creates an entity with metadata", %{context: context} do
       created_by = self()
       metadata = %{created_by: created_by}
-      entity = Context.create(context, metadata: metadata)
+      {:ok, entity} = Context.create(context, metadata: metadata)
 
       assert {^entity, types, %{created_by: ^created_by}} = Context.info(context, entity)
       assert MapSet.equal?(types, MapSet.new([]))
@@ -42,7 +42,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "retrieves information about an entity by id", %{context: context} do
-      entity = Context.create(context, name: "Foo")
+      {:ok, entity} = Context.create(context, name: "Foo")
 
       assert {^entity, types, %{}} = Context.info(context, entity)
       assert MapSet.equal?(types, MapSet.new([]))
@@ -55,7 +55,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "looks up an entity by name", %{context: context} do
-      entity = Context.create(context, name: "Foo")
+      {:ok, entity} = Context.create(context, name: "Foo")
 
       assert {^entity, types, %{}} = Context.lookup(context, "Foo")
       assert MapSet.equal?(types, MapSet.new([]))
@@ -64,8 +64,8 @@ defmodule Genesis.ContextTest do
 
   describe "exists?" do
     test "checks entity existence by reference and name", %{context: context} do
-      entity_1 = Context.create(context, name: "Foo")
-      entity_2 = Context.create(context, name: "Bar")
+      {:ok, entity_1} = Context.create(context, name: "Foo")
+      {:ok, entity_2} = Context.create(context, name: "Bar")
 
       assert Context.exists?(context, entity_1)
       assert Context.exists?(context, "Foo")
@@ -85,7 +85,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "fetches components of an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Position{x: 10, y: 20})
 
@@ -95,7 +95,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "fetches components of an entity by name", %{context: context} do
-      entity = Context.create(context, name: "Foo")
+      {:ok, entity} = Context.create(context, name: "Foo")
 
       Context.emplace(context, entity, %Position{x: 10, y: 20})
 
@@ -107,7 +107,7 @@ defmodule Genesis.ContextTest do
 
   describe "emplace" do
     test "inserts a component for an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       assert :ok = Context.emplace(context, entity, %Position{x: 10, y: 20})
       assert {^entity, types, %{}} = Context.info(context, entity)
@@ -115,7 +115,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "inserting the same component twice fails", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       assert :ok = Context.emplace(context, entity, %Position{x: 10, y: 20})
 
@@ -126,7 +126,7 @@ defmodule Genesis.ContextTest do
 
   describe "replace" do
     test "replaces an existing component", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Position{x: 0, y: 0})
 
@@ -137,7 +137,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "fails when component does not exist", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       assert {:error, :component_not_found} =
                Context.replace(context, entity, %Position{x: 10, y: 20})
@@ -146,7 +146,7 @@ defmodule Genesis.ContextTest do
 
   describe "clear" do
     test "clears all data from the context", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Health{current: 10, maximum: 10})
       Context.emplace(context, entity, %Position{x: 10, y: 20})
@@ -160,7 +160,7 @@ defmodule Genesis.ContextTest do
 
   describe "patch" do
     test "patches metadata of an entity", %{context: context} do
-      entity = Context.create(context, metadata: %{foo: "bar", bar: "baz"})
+      {:ok, entity} = Context.create(context, metadata: %{foo: "bar", bar: "baz"})
 
       assert :ok = Context.patch(context, entity, %{foo: "baz"})
 
@@ -178,7 +178,7 @@ defmodule Genesis.ContextTest do
 
   describe "erase" do
     test "erases all components from an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Health{current: 10, maximum: 10})
       Context.emplace(context, entity, %Position{x: 10, y: 20})
@@ -198,13 +198,13 @@ defmodule Genesis.ContextTest do
     end
 
     test "fails to erase a non-existent component from an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       assert {:error, :component_not_found} = Context.erase(context, entity, Health)
     end
 
     test "erases the component from an entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Health{current: 10, maximum: 10})
       Context.emplace(context, entity, %Position{x: 10, y: 20})
@@ -226,7 +226,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "assigns components to an existing entity", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       components = [%Position{x: 10, y: 20}, %Health{current: 100, maximum: 100}]
 
@@ -238,7 +238,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "replaces existing components with new ones", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Position{x: 0, y: 0})
       Context.emplace(context, entity, %Health{current: 50, maximum: 100})
@@ -253,7 +253,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "clears all components when assigning empty list", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Position{x: 10, y: 20})
       Context.emplace(context, entity, %Health{current: 100, maximum: 100})
@@ -273,7 +273,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "destroys an entity and removes all associated data", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
       Context.emplace(context, entity, %Position{x: 10, y: 20})
 
       assert :ok = Context.destroy(context, entity)
@@ -285,8 +285,8 @@ defmodule Genesis.ContextTest do
 
   describe "streams" do
     test "streams all metadata", %{context: context} do
-      entity_1 = Context.create(context, metadata: %{foo: "bar"})
-      entity_2 = Context.create(context, metadata: %{baz: "qux"})
+      {:ok, entity_1} = Context.create(context, metadata: %{foo: "bar"})
+      {:ok, entity_2} = Context.create(context, metadata: %{baz: "qux"})
 
       stream = Context.metadata(context)
 
@@ -300,8 +300,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "streams all components", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_1, %Position{x: 10, y: 20})
       Context.emplace(context, entity_2, %Position{x: 30, y: 40})
@@ -316,8 +316,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "streams all entities", %{context: context} do
-      entity_1 = Context.create(context, name: "Foo")
-      entity_2 = Context.create(context, name: "Bar")
+      {:ok, entity_1} = Context.create(context, name: "Foo")
+      {:ok, entity_2} = Context.create(context, name: "Bar")
 
       Context.emplace(context, entity_1, %Position{x: 10, y: 20})
       Context.emplace(context, entity_2, %Position{x: 30, y: 40})
@@ -336,7 +336,7 @@ defmodule Genesis.ContextTest do
 
   describe "queries" do
     test "get/1", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Health{current: 100})
 
@@ -345,7 +345,7 @@ defmodule Genesis.ContextTest do
     end
 
     test "get/2", %{context: context} do
-      entity = Context.create(context)
+      {:ok, entity} = Context.create(context)
 
       Context.emplace(context, entity, %Health{current: 100})
 
@@ -354,9 +354,9 @@ defmodule Genesis.ContextTest do
     end
 
     test "all/0", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
-      entity_3 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
+      {:ok, entity_3} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 100})
       Context.emplace(context, entity_2, %Health{current: 100})
@@ -370,8 +370,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "at_least/2", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 10})
       Context.emplace(context, entity_2, %Health{current: 50})
@@ -381,8 +381,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "at_most/2", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 10})
       Context.emplace(context, entity_2, %Health{current: 50})
@@ -392,8 +392,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "between/3", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 10})
       Context.emplace(context, entity_2, %Health{current: 50})
@@ -404,13 +404,13 @@ defmodule Genesis.ContextTest do
     end
 
     test "children_of/2", %{context: context} do
-      parent_1 = Context.create(context)
-      parent_1_child_1 = Context.create(context, parent: parent_1)
-      parent_1_child_2 = Context.create(context, parent: parent_1)
+      {:ok, parent_1} = Context.create(context)
+      {:ok, parent_1_child_1} = Context.create(context, parent: parent_1)
+      {:ok, parent_1_child_2} = Context.create(context, parent: parent_1)
 
-      parent_2 = Context.create(context)
-      parent_2_child_1 = Context.create(context, parent: parent_2)
-      parent_2_child_2 = Context.create(context, parent: parent_2)
+      {:ok, parent_2} = Context.create(context)
+      {:ok, parent_2_child_1} = Context.create(context, parent: parent_2)
+      {:ok, parent_2_child_2} = Context.create(context, parent: parent_2)
 
       children_1 = MapSet.new(Context.children_of(context, parent_1))
       children_2 = MapSet.new(Context.children_of(context, parent_2))
@@ -433,8 +433,8 @@ defmodule Genesis.ContextTest do
     end
 
     test "match/1", %{context: context} do
-      entity_1 = Context.create(context)
-      entity_2 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 100, maximum: 100})
       Context.emplace(context, entity_2, %Health{current: 0, maximum: 100})
@@ -445,13 +445,13 @@ defmodule Genesis.ContextTest do
     end
 
     test "all_of", %{context: context} do
-      entity_1 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 100})
       Context.emplace(context, entity_1, %Position{x: 10, y: 20})
       Context.emplace(context, entity_1, %Moniker{name: "Entity"})
 
-      entity_2 = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_2, %Health{current: 100})
       Context.emplace(context, entity_2, %Position{x: 10, y: 20})
@@ -460,13 +460,13 @@ defmodule Genesis.ContextTest do
     end
 
     test "any_of", %{context: context} do
-      entity_1 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 100})
       Context.emplace(context, entity_1, %Position{x: 10, y: 20})
       Context.emplace(context, entity_1, %Moniker{name: "Entity"})
 
-      entity_2 = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_2, %Position{x: 5, y: 15})
 
@@ -474,11 +474,11 @@ defmodule Genesis.ContextTest do
     end
 
     test "none_of", %{context: context} do
-      entity_1 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
 
       Context.emplace(context, entity_1, %Moniker{name: "Entity"})
 
-      entity_2 = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_2, %Health{current: 100})
       Context.emplace(context, entity_2, %Position{x: 10, y: 20})
@@ -487,18 +487,18 @@ defmodule Genesis.ContextTest do
     end
 
     test "search", %{context: context} do
-      entity_1 = Context.create(context)
+      {:ok, entity_1} = Context.create(context)
 
       Context.emplace(context, entity_1, %Health{current: 100})
       Context.emplace(context, entity_1, %Position{x: 10, y: 20})
       Context.emplace(context, entity_1, %Moniker{name: "Entity"})
 
-      entity_2 = Context.create(context)
+      {:ok, entity_2} = Context.create(context)
 
       Context.emplace(context, entity_2, %Health{current: 100})
       Context.emplace(context, entity_2, %Position{x: 10, y: 20})
 
-      entity_3 = Context.create(context)
+      {:ok, entity_3} = Context.create(context)
 
       Context.emplace(context, entity_3, %Health{current: 100})
       Context.emplace(context, entity_3, %Moniker{name: "Entity"})

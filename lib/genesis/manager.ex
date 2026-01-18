@@ -33,11 +33,13 @@ defmodule Genesis.Manager do
 
       {_entity, components} ->
         create_opts = Keyword.put(opts, :parent, entity)
-        clone = Genesis.Context.create(target_context, create_opts)
 
-        original = Genesis.Utils.extract_properties(components)
-        merged = Genesis.Utils.merge_components(original, overrides)
-        with :ok <- Genesis.Context.assign(target_context, clone, merged), do: {:ok, clone}
+        with {:ok, clone} <- Genesis.Context.create(target_context, create_opts),
+             original = Genesis.Utils.extract_properties(components),
+             merged = Genesis.Utils.merge_components(original, overrides),
+             :ok <- Genesis.Context.assign(target_context, clone, merged) do
+          {:ok, clone}
+        end
     end
   end
 
@@ -122,17 +124,11 @@ defmodule Genesis.Manager do
         {:error, :already_registered}
 
       nil ->
-        metadata = %{extends: extends}
+        create_opts = [name: name, metadata: %{extends: extends}]
 
-        entity =
-          Genesis.Context.create(
-            Genesis.Prefabs,
-            name: name,
-            metadata: metadata
-          )
-
-        with :ok <- Genesis.Context.assign(Genesis.Prefabs, entity, components),
-             do: {:ok, entity, metadata, components}
+        with {:ok, entity} <- Genesis.Context.create(Genesis.Prefabs, create_opts),
+             :ok <- Genesis.Context.assign(Genesis.Prefabs, entity, components),
+             do: {:ok, entity, components}
     end
   end
 

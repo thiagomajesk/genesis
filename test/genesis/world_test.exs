@@ -26,7 +26,7 @@ defmodule Genesis.WorldTest do
     end
 
     test "returns all components for a given entity", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 100)
       Position.attach(entity, x: 10, y: 20)
@@ -44,7 +44,7 @@ defmodule Genesis.WorldTest do
 
   describe "list" do
     test "with components as list", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 100)
       Position.attach(entity, x: 10, y: 20)
@@ -62,7 +62,7 @@ defmodule Genesis.WorldTest do
     end
 
     test "with components as map", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 100)
       Position.attach(entity, x: 10, y: 20)
@@ -79,7 +79,7 @@ defmodule Genesis.WorldTest do
   end
 
   test "create/1", %{world: world} do
-    entity = World.create(world)
+    {:ok, entity} = World.create(world)
 
     Health.attach(entity, current: 100)
     Position.attach(entity, x: 10, y: 20)
@@ -115,7 +115,7 @@ defmodule Genesis.WorldTest do
       }
     })
 
-    entity = World.create(world, "Human")
+    {:ok, entity} = World.create(world, "Human")
 
     components = World.fetch(world, entity)
 
@@ -136,13 +136,13 @@ defmodule Genesis.WorldTest do
     })
 
     overrides = %{"moniker" => %{name: "Healing Potion"}}
-    entity = World.create(world, "Item", overrides)
+    {:ok, entity} = World.create(world, "Item", overrides)
 
     assert %Moniker{name: "Healing Potion"} = Moniker.get(entity)
   end
 
   test "clone/1", %{world: world} do
-    entity = World.create(world)
+    {:ok, entity} = World.create(world)
 
     Health.attach(entity, current: 100)
     Position.attach(entity, x: 10, y: 20)
@@ -158,7 +158,7 @@ defmodule Genesis.WorldTest do
 
   describe "destroy/1" do
     test "removes entity components", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 100)
       Position.attach(entity, x: 10, y: 20)
@@ -182,14 +182,14 @@ defmodule Genesis.WorldTest do
 
   describe "attach/3" do
     test "attaches a component to an entity", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       assert :ok = Health.attach(entity, current: 100)
       assert %Health{current: 100} = Health.get(entity)
     end
 
     test "returns error when component already attached", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 50)
       assert :error = Health.attach(entity, current: 100)
@@ -199,7 +199,7 @@ defmodule Genesis.WorldTest do
 
   describe "update/3" do
     test "updates a component on an entity", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       Health.attach(entity, current: 100)
       assert :ok = Health.update(entity, current: 50)
@@ -207,7 +207,7 @@ defmodule Genesis.WorldTest do
     end
 
     test "returns error when component not present", %{world: world} do
-      entity = World.create(world)
+      {:ok, entity} = World.create(world)
 
       assert :noop = Health.update(entity, current: 50)
     end
@@ -215,9 +215,9 @@ defmodule Genesis.WorldTest do
 
   describe "queries" do
     test "all/2", %{world: world} do
-      entity_1 = World.create(world)
-      entity_2 = World.create(world)
-      entity_3 = World.create(world)
+      {:ok, entity_1} = World.create(world)
+      {:ok, entity_2} = World.create(world)
+      {:ok, entity_3} = World.create(world)
 
       Health.attach(entity_1, current: 100)
       Health.attach(entity_2, current: 100)
@@ -231,8 +231,8 @@ defmodule Genesis.WorldTest do
     end
 
     test "at_least/4", %{world: world} do
-      entity_1 = World.create(world)
-      entity_2 = World.create(world)
+      {:ok, entity_1} = World.create(world)
+      {:ok, entity_2} = World.create(world)
 
       Health.attach(entity_1, current: 10)
       Health.attach(entity_2, current: 50)
@@ -241,8 +241,8 @@ defmodule Genesis.WorldTest do
     end
 
     test "at_most/4", %{world: world} do
-      entity_1 = World.create(world)
-      entity_2 = World.create(world)
+      {:ok, entity_1} = World.create(world)
+      {:ok, entity_2} = World.create(world)
 
       Health.attach(entity_1, current: 10)
       Health.attach(entity_2, current: 50)
@@ -251,8 +251,8 @@ defmodule Genesis.WorldTest do
     end
 
     test "between/5", %{world: world} do
-      entity_1 = World.create(world)
-      entity_2 = World.create(world)
+      {:ok, entity_1} = World.create(world)
+      {:ok, entity_2} = World.create(world)
 
       Health.attach(entity_1, current: 10)
       Health.attach(entity_2, current: 50)
@@ -262,8 +262,8 @@ defmodule Genesis.WorldTest do
     end
 
     test "match/3", %{world: world} do
-      entity_1 = World.create(world)
-      entity_2 = World.create(world)
+      {:ok, entity_1} = World.create(world)
+      {:ok, entity_2} = World.create(world)
 
       Health.attach(entity_1, current: 100, maximum: 100)
       Health.attach(entity_2, current: 0, maximum: 100)

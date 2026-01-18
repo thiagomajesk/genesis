@@ -29,7 +29,7 @@ end
 
 seed_entities = fn input ->
   Enum.map(1..input.max_entities, fn _ ->
-    entity = Genesis.Context.create(input.context)
+    {:ok, entity} = Genesis.Context.create(input.context)
     components = build_components.(input.component_types)
 
     case Genesis.Context.assign(input.context, entity, components) do
@@ -53,7 +53,7 @@ jobs = %{
     end,
     before_scenario: fn input ->
       seed_entities.(input)
-      entity = Genesis.Context.create(input.context)
+      {:ok, entity} = Genesis.Context.create(input.context)
       components = build_components.(input.component_types)
       Map.put(input, :scenario, %{entity: entity, components: components})
     end
@@ -98,7 +98,7 @@ jobs = %{
     end,
     before_scenario: fn input ->
       seed_entities.(input)
-      entity = Genesis.Context.create(input.context, name: "benchmark_target")
+      {:ok, entity} = Genesis.Context.create(input.context, name: "benchmark_target")
       components = build_components.(input.component_types)
       Genesis.Context.assign(input.context, entity, components)
       Map.put(input, :scenario, %{name: "benchmark_target"})
@@ -134,7 +134,7 @@ jobs = %{
     end,
     before_scenario: fn input ->
       seed_entities.(input)
-      entity = Genesis.Context.create(input.context)
+      {:ok, entity} = Genesis.Context.create(input.context)
       [component | other_components] = build_components.(input.component_types)
       Genesis.Context.assign(input.context, entity, other_components)
       Map.put(input, :scenario, %{entity: entity, component: component})

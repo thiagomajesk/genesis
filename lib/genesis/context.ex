@@ -128,22 +128,12 @@ defmodule Genesis.Context do
   """
   def lookup(context, name) when is_binary(name) do
     mtable = table!(context, :metadata)
+    nindex = table!(context, :name_index)
 
-    match_spec = [
-      {
-        {:_, :"$1", :"$2", :"$3"},
-        [{:==, {:map_get, :name, :"$1"}, name}],
-        [{{:"$1", :"$2", :"$3"}}]
-      }
-    ]
-
-    case :ets.select(mtable, match_spec) do
-      [] ->
-        nil
-
-      [{entity, types, metadata}] ->
-        {entity, types, metadata}
-    end
+    with [{_name, hash}] <- :ets.lookup(nindex, name),
+         [{_key, entity, types, metadata}] <- :ets.lookup(mtable, hash),
+         do: {entity, types, metadata},
+         else: (_ -> nil)
   end
 
   @doc """
@@ -157,7 +147,7 @@ defmodule Genesis.Context do
   end
 
   def exists?(context, name) when is_binary(name) do
-    match?({_entity, _types, _metadata}, lookup(context, name))
+    :ets.member(table!(context, :name_index), name)
   end
 
   @doc """
@@ -473,8 +463,15 @@ defmodule Genesis.Context do
     mtable = :ets.new(:metadata, [:set | opts])
     ctable = :ets.new(:components, [:bag | opts])
     tindex = :ets.new(:type_index, [:bag | opts])
+    nindex = :ets.new(:name_index, [:set | opts])
 
-    tables = %{mtable: mtable, ctable: ctable, tindex: tindex}
+    tables = %{
+      mtable: mtable,
+      ctable: ctable,
+      tindex: tindex,
+      nindex: nindex
+    }
+
     Registry.register(Genesis.Registry, self(), tables)
 
     {:ok, %{tables: tables}}
@@ -484,14 +481,22 @@ defmodule Genesis.Context do
   def handle_call({:create, opts}, _from, state) do
     {metadata, opts} = Keyword.pop(opts, :metadata, %{})
 
+    name = Keyword.get(opts, :name)
     default_metadata = %{created_at: System.system_time()}
     updated_metadata = Map.merge(default_metadata, metadata)
 
-    entity = Genesis.Entity.new(Keyword.put(opts, :context, self()))
+    opts = Keyword.put(opts, :context, self())
 
-    ets_create(state.tables, entity, updated_metadata)
+    cond do
+      not is_nil(name) and :ets.member(state.tables.nindex, name) ->
+        {:reply, {:error, :name_already_registered}, state}
 
-    {:reply, entity, state}
+      true ->
+        entity = Genesis.Entity.new(opts)
+        ets_create(state.tables, entity, updated_metadata)
+
+        {:reply, {:ok, entity}, state}
+    end
   end
 
   @impl true
@@ -533,6 +538,7 @@ defmodule Genesis.Context do
     :ets.delete_all_objects(state.tables.mtable)
     :ets.delete_all_objects(state.tables.ctable)
     :ets.delete_all_objects(state.tables.tindex)
+    :ets.delete_all_objects(state.tables.nindex)
     {:reply, :ok, state}
   end
 
@@ -603,8 +609,9 @@ defmodule Genesis.Context do
     end
   end
 
-  defp ets_create(%{mtable: mtable}, entity, metadata) do
+  defp ets_create(%{mtable: mtable, nindex: nindex}, entity, metadata) do
     :ets.insert(mtable, {entity.hash, entity, MapSet.new(), metadata})
+    if entity.name, do: :ets.insert(nindex, {entity.name, entity.hash})
   end
 
   defp ets_emplace(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, component) do
@@ -666,11 +673,12 @@ defmodule Genesis.Context do
     :ets.insert(mtable, {hash, entity, types, metadata})
   end
 
-  defp ets_destroy(%{mtable: mtable, ctable: ctable, tindex: tindex}, mrecord) do
-    {hash, _entity, _types, _metadata} = mrecord
+  defp ets_destroy(%{mtable: mtable, ctable: ctable, tindex: tindex, nindex: nindex}, mrecord) do
+    {hash, entity, _types, _metadata} = mrecord
     :ets.delete(mtable, hash)
     :ets.delete(ctable, hash)
     :ets.match_delete(tindex, {:_, hash, :_, :_})
+    :ets.match_delete(nindex, {entity.name, hash})
   end
 
   defp apply_filter(stream, _filter, nil), do: stream
@@ -717,6 +725,15 @@ defmodule Genesis.Context do
     case Registry.lookup(Genesis.Registry, pid) do
       [{^pid, %{tindex: tindex}}] -> tindex
       [] -> raise "Types index table not found for context #{inspect(context)}"
+    end
+  end
+
+  defp table!(context, :name_index) do
+    pid = resolve_context(context)
+
+    case Registry.lookup(Genesis.Registry, pid) do
+      [{^pid, %{nindex: nindex}}] -> nindex
+      [] -> raise "Name index table not found for context #{inspect(context)}"
     end
   end
 

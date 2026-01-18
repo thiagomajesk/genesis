@@ -32,7 +32,7 @@ defmodule Genesis.GenesisTest do
   end
 
   test "events are handled in registration order", %{world: world} do
-    entity = World.create(world)
+    {:ok, entity} = World.create(world)
 
     # Attach in reverse to prove the order of registration is the
     # one that really matters when dispatching events to entities
@@ -52,7 +52,7 @@ defmodule Genesis.GenesisTest do
   end
 
   test "events dispatched to the same entity are handled sequentially", %{world: world} do
-    entity = World.create(world)
+    {:ok, entity} = World.create(world)
 
     Ping.attach(entity)
     Pong.attach(entity)
@@ -71,8 +71,8 @@ defmodule Genesis.GenesisTest do
   end
 
   test "events dispatched to different entities are handled concurrently", %{world: world} do
-    entity_1 = World.create(world)
-    entity_2 = World.create(world)
+    {:ok, entity_1} = World.create(world)
+    {:ok, entity_2} = World.create(world)
 
     Ping.attach(entity_1)
     Pong.attach(entity_1)
