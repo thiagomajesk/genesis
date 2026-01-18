@@ -6,9 +6,10 @@ defmodule Genesis.Context do
 
   A context contains three ETS tables that are always kept in sync.
 
-    * Metadata - stores entity metadata such as name and custom data
-    * Components - stores components associated with entities
-    * Type Index - stores components indexed by type
+    * `mtable` - table that stores metadata associated with entities
+    * `ctable` - table that stores components associated with entities
+    * `nindex` - table that stores metadata indexed by name
+    * `tindex` - table that stores components indexed by type
 
   NOTE: most read operations are intentionally dirty reads for performance reasons.
   """
@@ -54,7 +55,7 @@ defmodule Genesis.Context do
   Returns `{entity, types, metadata}` if found, or `nil`.
   """
   def info(context, %Genesis.Entity{} = entity) do
-    mtable = table!(context, :metadata)
+    mtable = table!(context, :mtable)
 
     case :ets.lookup(mtable, entity.hash) do
       [] ->
@@ -127,8 +128,8 @@ defmodule Genesis.Context do
   Returns `{entity, types, metadata}` if found, or `nil`.
   """
   def lookup(context, name) when is_binary(name) do
-    mtable = table!(context, :metadata)
-    nindex = table!(context, :name_index)
+    mtable = table!(context, :mtable)
+    nindex = table!(context, :nindex)
 
     with [{_name, hash}] <- :ets.lookup(nindex, name),
          [{_key, entity, types, metadata}] <- :ets.lookup(mtable, hash),
@@ -143,11 +144,11 @@ defmodule Genesis.Context do
   def exists?(context, entity_or_name)
 
   def exists?(context, %Genesis.Entity{} = entity) do
-    :ets.member(table!(context, :metadata), entity.hash)
+    :ets.member(table!(context, :mtable), entity.hash)
   end
 
   def exists?(context, name) when is_binary(name) do
-    :ets.member(table!(context, :name_index), name)
+    :ets.member(table!(context, :nindex), name)
   end
 
   @doc """
@@ -161,8 +162,8 @@ defmodule Genesis.Context do
   end
 
   def fetch(context, %Genesis.Entity{} = entity) do
-    mtable = table!(context, :metadata)
-    ctable = table!(context, :components)
+    mtable = table!(context, :mtable)
+    ctable = table!(context, :ctable)
 
     case :ets.lookup(mtable, entity.hash) do
       [] ->
@@ -184,7 +185,7 @@ defmodule Genesis.Context do
       [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
   """
   def all(context, component_type) when is_atom(component_type) do
-    tindex = table!(context, :type_index)
+    tindex = table!(context, :tindex)
 
     :ets.select(tindex, [
       {
@@ -206,7 +207,7 @@ defmodule Genesis.Context do
   """
   def get(context, %Genesis.Entity{} = entity, component_type, default \\ nil)
       when is_atom(component_type) do
-    ctable = table!(context, :components)
+    ctable = table!(context, :ctable)
 
     match_spec = [
       {
@@ -232,7 +233,7 @@ defmodule Genesis.Context do
   """
   def match(context, component_type, properties)
       when is_atom(component_type) and is_non_empty_pairs(properties) do
-    tindex = table!(context, :type_index)
+    tindex = table!(context, :tindex)
 
     guards =
       Enum.map(properties, fn {property, value} ->
@@ -258,7 +259,7 @@ defmodule Genesis.Context do
   """
   def at_least(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
-    tindex = table!(context, :type_index)
+    tindex = table!(context, :tindex)
 
     :ets.select(tindex, [
       {
@@ -279,7 +280,7 @@ defmodule Genesis.Context do
   """
   def at_most(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
-    tindex = table!(context, :type_index)
+    tindex = table!(context, :tindex)
 
     :ets.select(tindex, [
       {
@@ -300,7 +301,7 @@ defmodule Genesis.Context do
   """
   def between(context, component_type, property, min, max)
       when is_atom(component_type) and is_atom(property) and is_min_max(min, max) do
-    tindex = table!(context, :type_index)
+    tindex = table!(context, :tindex)
 
     :ets.select(tindex, [
       {
@@ -324,7 +325,7 @@ defmodule Genesis.Context do
       [entity_2, entity_3, entity_4, ...]
   """
   def children_of(context, %Genesis.Entity{} = entity) do
-    mtable = table!(context, :metadata)
+    mtable = table!(context, :mtable)
 
     :ets.select(mtable, [
       {
@@ -401,7 +402,7 @@ defmodule Genesis.Context do
   Returns a stream of all metadata entries in the context.
   """
   def metadata(context) do
-    mtable = table!(context, :metadata)
+    mtable = table!(context, :mtable)
 
     # NOTE: normalize the output of the streams so it returns {key, value} tuples
     # This is useful for applying additional transformations like grouping keys.
@@ -414,7 +415,7 @@ defmodule Genesis.Context do
   Returns a stream of all component entries in the context.
   """
   def components(context) do
-    ctable = table!(context, :components)
+    ctable = table!(context, :ctable)
 
     # NOTE: normalize the output of the streams so it returns {key, value} tuples
     # This is useful for applying additional transformations like grouping keys.
@@ -427,8 +428,8 @@ defmodule Genesis.Context do
   Returns a stream of entities with their components grouped together.
   """
   def entities(context) do
-    mtable = table!(context, :metadata)
-    ctable = table!(context, :components)
+    mtable = table!(context, :mtable)
+    ctable = table!(context, :ctable)
 
     metadata_stream = Genesis.ETS.stream(mtable, &{mtable, &1})
     components_stream = Genesis.ETS.stream(ctable, &{ctable, &1})
@@ -460,10 +461,10 @@ defmodule Genesis.Context do
   @impl true
   def init(_args) do
     opts = [:protected, read_concurrency: true]
-    mtable = :ets.new(:metadata, [:set | opts])
-    ctable = :ets.new(:components, [:bag | opts])
-    tindex = :ets.new(:type_index, [:bag | opts])
-    nindex = :ets.new(:name_index, [:set | opts])
+    mtable = :ets.new(:mtable, [:set | opts])
+    ctable = :ets.new(:ctable, [:bag | opts])
+    tindex = :ets.new(:tindex, [:bag | opts])
+    nindex = :ets.new(:nindex, [:set | opts])
 
     tables = %{
       mtable: mtable,
@@ -701,39 +702,12 @@ defmodule Genesis.Context do
     end)
   end
 
-  defp table!(context, :metadata) do
+  defp table!(context, name) do
     pid = resolve_context(context)
 
     case Registry.lookup(Genesis.Registry, pid) do
-      [{^pid, %{mtable: mtable}}] -> mtable
-      [] -> raise "Metadata table not found for context #{inspect(context)}"
-    end
-  end
-
-  defp table!(context, :components) do
-    pid = resolve_context(context)
-
-    case Registry.lookup(Genesis.Registry, pid) do
-      [{^pid, %{ctable: ctable}}] -> ctable
-      [] -> raise "Components table not found for context #{inspect(context)}"
-    end
-  end
-
-  defp table!(context, :type_index) do
-    pid = resolve_context(context)
-
-    case Registry.lookup(Genesis.Registry, pid) do
-      [{^pid, %{tindex: tindex}}] -> tindex
-      [] -> raise "Types index table not found for context #{inspect(context)}"
-    end
-  end
-
-  defp table!(context, :name_index) do
-    pid = resolve_context(context)
-
-    case Registry.lookup(Genesis.Registry, pid) do
-      [{^pid, %{nindex: nindex}}] -> nindex
-      [] -> raise "Name index table not found for context #{inspect(context)}"
+      [{^pid, %{^name => table}}] -> table
+      [] -> raise "table #{name} not found for context #{inspect(context)}"
     end
   end
 
