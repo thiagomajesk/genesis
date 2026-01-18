@@ -148,24 +148,18 @@ defmodule Genesis.Manager do
     end
 
     name = component_type.__component__(:name)
+    events = component_type.__component__(:events)
 
-    case Genesis.Context.lookup(Genesis.Components, name) do
-      {entity, _types, _metadata} ->
-        raise ArgumentError, "component #{inspect(entity.name)} is already registered"
+    metadata = %{events: events, type: component_type}
 
-      nil ->
-        created_at = System.system_time()
-        events = component_type.__component__(:events)
-        metadata = %{created_at: created_at, events: events, type: component_type}
+    create_opts = [name: name, metadata: metadata]
 
-        entity =
-          Genesis.Context.create(
-            Genesis.Components,
-            name: name,
-            metadata: metadata
-          )
+    case Genesis.Context.create(Genesis.Components, create_opts) do
+      {:ok, entity} ->
+        {entity, component_type, events}
 
-        {entity, metadata}
+      {:error, :already_registered} ->
+        raise ArgumentError, "component #{inspect(name)} is already registered"
     end
   end
 
@@ -190,10 +184,10 @@ defmodule Genesis.Manager do
   end
 
   defp build_events_lookup(registered) do
-    Enum.reduce(registered, %{}, fn {_entity, metadata}, lookup ->
-      Enum.reduce(metadata.events, lookup, fn event, lookup ->
+    Enum.reduce(registered, %{}, fn {_entity, type, events}, lookup ->
+      Enum.reduce(events, lookup, fn event, lookup ->
         # Store events in the correct order from the start since this will be static
-        Map.update(lookup, event, [metadata.type], &(&1 ++ [metadata.type]))
+        Map.update(lookup, event, [type], &(&1 ++ [type]))
       end)
     end)
   end
