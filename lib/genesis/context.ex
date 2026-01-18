@@ -4,15 +4,32 @@ defmodule Genesis.Context do
   @moduledoc """
   Provides low-level entity storage backed by ETS.
 
-  A context contains three ETS tables that are always kept in sync.
+  A context contains the following ETS tables that are always kept in sync.
 
     * `mtable` - table that stores metadata associated with entities
     * `ctable` - table that stores components associated with entities
     * `nindex` - table that stores metadata indexed by name
     * `tindex` - table that stores components indexed by type
+    * `aindex` - table that stores archetype bloom bits
+
+  ## Archetypes
+
+  The archetype index (`aindex`) is table that uses a bloom filter as the key
+  that allows fast searches of entities based on their component composition.
+
+  Even though the `aindex` table has roughly the same number of entries as `mtable`,
+  it's implemented as a `:bag`, meaning we don't have to to scan the entire table
+  to find entities matching a given archetype. This allows for efficient querying of
+  entities that share the same archetype (`all_of` queries).
 
   NOTE: most read operations are intentionally dirty reads for performance reasons.
   """
+
+  # Defines how many elements we want to support in the bloom filter with a low false positive rate.
+  # Although this value could be calculated dynamically, I chose to have a standard for the 1% of false positives.
+  # This number can be read as: "How many components can we have in the bloom filter before the false positive rate exceeds 1%?".
+  # The current value of 100 components will yield a bitmask of around 962 bits (121 bytes), which is fairly reasonable.
+  @bloom_limit 100
 
   use GenServer
 
@@ -386,16 +403,54 @@ defmodule Genesis.Context do
     any = Keyword.get(opts, :any)
     none = Keyword.get(opts, :none)
 
+    # Masks specific for the bloom filter
+    all_masks = build_bloom_filter(List.wrap(all))
+    all_filter = Genesis.Bloom.merge_masks(all_masks)
+
+    any_masks = build_bloom_filter(List.wrap(any))
+    any_filter = Genesis.Bloom.merge_masks(any_masks)
+
+    none_masks = build_bloom_filter(List.wrap(none))
+    none_filter = Genesis.Bloom.merge_masks(none_masks)
+
+    all_guard =
+      if all_filter != 0,
+        do: [{:==, {:band, :"$1", all_filter}, all_filter}],
+        else: []
+
+    any_guard =
+      if any_filter != 0,
+        do: [{:"/=", {:band, :"$1", any_filter}, 0}],
+        else: []
+
+    none_guard =
+      if none_filter != 0,
+        do: [{:==, {:band, :"$1", none_filter}, 0}],
+        else: []
+
+    guards = Enum.concat([all_guard, any_guard, none_guard])
+
+    match_spec = [{{:"$1", :"$2"}, guards, [:"$2"]}]
+
+    aindex = table!(context, :aindex)
+    mtable = table!(context, :mtable)
+
+    hashes = :ets.select(aindex, match_spec)
+    stream = Genesis.ETS.stream_lookup(mtable, hashes)
+
+    # Lookups for the false-positive checks
     all_lookup = all && MapSet.new(all)
     any_lookup = any && MapSet.new(any)
-    none_lookup = none && MapSet.new(none)
 
-    context
-    |> metadata()
-    |> apply_filter(:all, all_lookup)
-    |> apply_filter(:any, any_lookup)
-    |> apply_filter(:none, none_lookup)
-    |> Enum.map(fn {entity, _metadata} -> entity end)
+    # Since we are using a bloom filter, we need to verify the results to filter out false positives.
+    # We don't need to check for false negatives since bloom filters guarantee no false negatives.
+    verified =
+      Stream.filter(stream, fn {_hash, _entity, types, _metadata} ->
+        (all_lookup == nil or MapSet.subset?(all_lookup, types)) and
+          (any_lookup == nil or not MapSet.disjoint?(any_lookup, types))
+      end)
+
+    Enum.map(verified, fn {_hash, entity, _types, _metadata} -> entity end)
   end
 
   @doc """
@@ -465,12 +520,14 @@ defmodule Genesis.Context do
     ctable = :ets.new(:ctable, [:bag | opts])
     tindex = :ets.new(:tindex, [:bag | opts])
     nindex = :ets.new(:nindex, [:set | opts])
+    aindex = :ets.new(:aindex, [:bag | opts])
 
     tables = %{
       mtable: mtable,
       ctable: ctable,
       tindex: tindex,
-      nindex: nindex
+      nindex: nindex,
+      aindex: aindex
     }
 
     Registry.register(Genesis.Registry, self(), tables)
@@ -540,6 +597,7 @@ defmodule Genesis.Context do
     :ets.delete_all_objects(state.tables.ctable)
     :ets.delete_all_objects(state.tables.tindex)
     :ets.delete_all_objects(state.tables.nindex)
+    :ets.delete_all_objects(state.tables.aindex)
     {:reply, :ok, state}
   end
 
@@ -610,95 +668,129 @@ defmodule Genesis.Context do
     end
   end
 
-  defp ets_create(%{mtable: mtable, nindex: nindex}, entity, metadata) do
-    :ets.insert(mtable, {entity.hash, entity, MapSet.new(), metadata})
-    if entity.name, do: :ets.insert(nindex, {entity.name, entity.hash})
+  defp ets_create(tables, entity, metadata) do
+    :ets.insert(tables.aindex, {0, entity.hash})
+    :ets.insert(tables.mtable, {entity.hash, entity, MapSet.new(), metadata})
+    if entity.name, do: :ets.insert(tables.nindex, {entity.name, entity.hash})
   end
 
-  defp ets_emplace(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, component) do
+  defp ets_emplace(tables, mrecord, component) do
     type = Map.fetch!(component, :__struct__)
 
     {hash, entity, types, metadata} = mrecord
-    :ets.insert(ctable, {hash, entity, type, component})
-    :ets.insert(tindex, {type, hash, entity, component})
-    :ets.insert(mtable, {hash, entity, MapSet.put(types, type), metadata})
+
+    update_archetypes(tables.aindex, hash, type)
+
+    :ets.insert(tables.ctable, {hash, entity, type, component})
+    :ets.insert(tables.tindex, {type, hash, entity, component})
+    :ets.insert(tables.mtable, {hash, entity, MapSet.put(types, type), metadata})
   end
 
-  defp ets_replace(%{ctable: ctable, tindex: tindex}, mrecord, type, new_component) do
+  defp ets_replace(tables, mrecord, type, new_component) do
     {hash, entity, _types, _metadata} = mrecord
-    :ets.match_delete(ctable, {hash, :_, type, :_})
-    :ets.match_delete(tindex, {type, hash, :_, :_})
-    :ets.insert(ctable, {hash, entity, type, new_component})
-    :ets.insert(tindex, {type, hash, entity, new_component})
+
+    update_archetypes(tables.aindex, hash, type)
+
+    :ets.match_delete(tables.ctable, {hash, :_, type, :_})
+    :ets.match_delete(tables.tindex, {type, hash, :_, :_})
+    :ets.insert(tables.ctable, {hash, entity, type, new_component})
+    :ets.insert(tables.tindex, {type, hash, entity, new_component})
   end
 
-  defp ets_erase(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, type, component) do
+  defp ets_erase(tables, mrecord, type, component) do
     {hash, entity, types, metadata} = mrecord
-    :ets.delete_object(ctable, {hash, entity, type, component})
-    :ets.delete_object(tindex, {type, hash, entity, component})
-    :ets.insert(mtable, {hash, entity, MapSet.delete(types, type), metadata})
+
+    updated_types = MapSet.delete(types, type)
+
+    rebuild_archetypes(tables.aindex, hash, updated_types)
+
+    :ets.delete_object(tables.ctable, {hash, entity, type, component})
+    :ets.delete_object(tables.tindex, {type, hash, entity, component})
+    :ets.insert(tables.mtable, {hash, entity, updated_types, metadata})
   end
 
-  defp ets_erase_all(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord) do
+  defp ets_erase_all(tables, mrecord) do
     {hash, entity, _types, metadata} = mrecord
 
-    :ets.delete(ctable, hash)
-    :ets.match_delete(tindex, {:_, hash, :_, :_})
-    :ets.insert(mtable, {hash, entity, MapSet.new(), metadata})
+    :ets.delete(tables.ctable, hash)
+    :ets.match_delete(tables.aindex, {:_, hash})
+    :ets.match_delete(tables.tindex, {:_, hash, :_, :_})
+    :ets.insert(tables.mtable, {hash, entity, MapSet.new(), metadata})
   end
 
-  defp ets_assign(%{ctable: ctable, mtable: mtable, tindex: tindex}, mrecord, components) do
+  defp ets_assign(tables, mrecord, components) do
     {hash, entity, _types, metadata} = mrecord
 
-    :ets.delete(ctable, hash)
-    :ets.match_delete(tindex, {:_, hash, :_, :_})
+    :ets.delete(tables.ctable, hash)
+    :ets.match_delete(tables.tindex, {:_, hash, :_, :_})
 
+    # Create records for batch insertion
     {crecords, trecords, component_types} =
       Enum.reduce(components, {[], [], []}, fn component, {crecords, trecords, types} ->
         type = Map.fetch!(component, :__struct__)
         crecord = {hash, entity, type, component}
         trecord = {type, hash, entity, component}
-        {[crecord | crecords], [trecord | trecords], [type | types]}
+
+        updated_types = [type | types]
+        updated_crecords = [crecord | crecords]
+        updated_trecords = [trecord | trecords]
+
+        {updated_crecords, updated_trecords, updated_types}
       end)
 
-    :ets.insert(ctable, Enum.reverse(crecords))
-    :ets.insert(tindex, Enum.reverse(trecords))
+    :ets.insert(tables.ctable, Enum.reverse(crecords))
+    :ets.insert(tables.tindex, Enum.reverse(trecords))
+
+    updated_types = MapSet.new(component_types)
+
+    rebuild_archetypes(tables.aindex, hash, updated_types)
 
     # NOTE: update the whole object because benchmarks are showing that this is still
     # fater than calling something like update_element/3 to update only component_types.
-    :ets.insert(mtable, {hash, entity, MapSet.new(component_types), metadata})
+    :ets.insert(tables.mtable, {hash, entity, updated_types, metadata})
   end
 
-  defp ets_patch(%{mtable: mtable}, mrecord, metadata) do
+  defp ets_patch(tables, mrecord, metadata) do
     {hash, entity, types, _metadata} = mrecord
-    :ets.insert(mtable, {hash, entity, types, metadata})
+
+    :ets.insert(tables.mtable, {hash, entity, types, metadata})
   end
 
-  defp ets_destroy(%{mtable: mtable, ctable: ctable, tindex: tindex, nindex: nindex}, mrecord) do
+  defp ets_destroy(tables, mrecord) do
     {hash, entity, _types, _metadata} = mrecord
-    :ets.delete(mtable, hash)
-    :ets.delete(ctable, hash)
-    :ets.match_delete(tindex, {:_, hash, :_, :_})
-    :ets.match_delete(nindex, {entity.name, hash})
+
+    :ets.delete(tables.mtable, hash)
+    :ets.delete(tables.ctable, hash)
+    :ets.match_delete(tables.aindex, {:_, hash})
+    :ets.match_delete(tables.tindex, {:_, hash, :_, :_})
+    :ets.match_delete(tables.nindex, {entity.name, hash})
   end
 
-  defp apply_filter(stream, _filter, nil), do: stream
-
-  defp apply_filter(stream, :all, lookup) do
-    Stream.filter(stream, fn {_entity, {types, _metadata}} ->
-      MapSet.subset?(lookup, types)
-    end)
+  defp rebuild_archetypes(aindex, hash, types) do
+    masks = build_bloom_filter(types)
+    updated_mask = Genesis.Bloom.merge_masks(masks)
+    :ets.insert(aindex, {updated_mask, hash})
   end
 
-  defp apply_filter(stream, :any, lookup) do
-    Stream.filter(stream, fn {_entity, {types, _metadata}} ->
-      not MapSet.disjoint?(lookup, types)
-    end)
+  defp update_archetypes(aindex, hash, type) do
+    # If we are keeping things in sync, there should be
+    # only one entry per entity in the archetype index.
+    [[current_mask]] = :ets.match(aindex, {:"$1", hash})
+
+    [mask] = build_bloom_filter([type])
+    updated_mask = Genesis.Bloom.merge_masks(current_mask, mask)
+
+    :ets.match_delete(aindex, {:_, hash})
+    :ets.insert(aindex, {updated_mask, hash})
   end
 
-  defp apply_filter(stream, :none, lookup) do
-    Stream.filter(stream, fn {_entity, {types, _metadata}} ->
-      MapSet.disjoint?(lookup, types)
+  defp build_bloom_filter(types) do
+    mask_size = Genesis.Bloom.bloom_bits(@bloom_limit)
+
+    Enum.map(types, fn type ->
+      name = type.__component__(:name)
+      events = type.__component__(:events)
+      Genesis.Bloom.bloom_mask({name, events}, mask_size)
     end)
   end
 

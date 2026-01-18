@@ -48,4 +48,38 @@ defmodule Genesis.ETS do
       fn _ -> nil end
     )
   end
+
+  @doc """
+  Streams results of ETS lookups for a list of keys.
+
+  Takes a table, a list of keys, and an optional transform function.
+  The transform function receives each lookup result and can reshape it.
+  """
+  def stream_lookup(table, keys, transform \\ & &1) when is_list(keys) do
+    start_fun = fn ->
+      :ets.safe_fixtable(table, true)
+      keys
+    end
+
+    next_fun = fn
+      [] ->
+        {:halt, []}
+
+      [key | rest] ->
+        case :ets.lookup(table, key) do
+          [] ->
+            {[], rest}
+
+          objects ->
+            entries = Enum.map(objects, transform)
+            {entries, rest}
+        end
+    end
+
+    after_fun = fn _ ->
+      :ets.safe_fixtable(table, false)
+    end
+
+    Stream.resource(start_fun, next_fun, after_fun)
+  end
 end
