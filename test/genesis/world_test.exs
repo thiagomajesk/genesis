@@ -148,7 +148,7 @@ defmodule Genesis.WorldTest do
     Position.attach(entity, x: 10, y: 20)
     Moniker.attach(entity, name: "Object")
 
-    clone = World.clone(world, entity)
+    {:ok, clone} = World.clone(world, entity)
 
     assert clone != entity
     assert Health.get(clone) == Health.get(entity)

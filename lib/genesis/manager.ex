@@ -16,12 +16,8 @@ defmodule Genesis.Manager do
 
   See `Genesis.Context.create/2` for additional options.
   """
-  def clone!(%Genesis.Entity{} = entity, opts \\ []) do
+  def clone(%Genesis.Entity{} = entity, opts \\ []) do
     {overrides, opts} = Keyword.pop(opts, :overrides, %{})
-
-    if not is_map(overrides) do
-      raise ArgumentError, ":overrides option must be a map"
-    end
 
     # The common use-case is to clone within the same context.
     {source_context, opts} = Keyword.pop!(opts, :source)

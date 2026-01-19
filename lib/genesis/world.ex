@@ -123,7 +123,7 @@ defmodule Genesis.World do
 
   @doc """
   Clones an entity with all its components.
-  See `Genesis.Manager.clone!/2` for more details.
+  See `Genesis.Manager.clone/2` for more details.
   """
   def clone(world, entity, opts \\ []) do
     GenServer.call(world, {:clone, entity, opts})
@@ -239,7 +239,7 @@ defmodule Genesis.World do
           overrides: overrides
         ]
 
-        {:reply, Genesis.Manager.clone!(prefab, options), state}
+        {:reply, Genesis.Manager.clone(prefab, options), state}
     end
   end
 
@@ -291,13 +291,7 @@ defmodule Genesis.World do
       |> Keyword.put(:source, state.context)
       |> Keyword.put(:target, state.context)
 
-    case Genesis.Manager.clone!(entity, clone_opts) do
-      {:ok, clone} ->
-        {:reply, clone, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+    {:reply, Genesis.Manager.clone(entity, clone_opts), state}
   end
 
   @impl true
