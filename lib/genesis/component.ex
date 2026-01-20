@@ -8,13 +8,26 @@ defmodule Genesis.Component do
   Defining a component is as simple as creating a module that uses `Genesis.Component`.
   Then, you define which properties the component should have by using the `prop` macro.
 
-  You can also specify which events the component should handle by passing the `:events` option.
+  ## Options
+
+    * `:name` - the component name used for registration (optional)
+    * `:events` - list of events this component should handle
+
+  ## Examples
 
       defmodule MyApp.Components.Health do
         use Genesis.Component, events: [:damage]
 
         prop :current, :integer, default: 100
         prop :maximum, :integer, default: 100
+      end
+
+      defmodule MyApp.Components.MegaHealth do
+        use Genesis.Component, name: "custom_health", events: [:damage, :regenerate]
+
+        prop :current, :integer, default: 200
+        prop :maximum, :integer, default: 200
+        prop :regen_rate, :integer, default: 5
       end
 
   ## Handling Events
