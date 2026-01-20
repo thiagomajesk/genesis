@@ -70,9 +70,9 @@ defmodule Genesis.Entity do
   def named?(%Entity{name: name}), do: not is_nil(name)
 
   @doc """
-  Returns true when the entity was derived from another entity.
+  Returns true when the entity is a child of another entity.
   """
-  def derived?(%Entity{parent: parent}), do: not is_nil(parent)
+  def child?(%Entity{parent: parent}), do: not is_nil(parent)
 end
 
 defimpl Inspect, for: Genesis.Entity do
