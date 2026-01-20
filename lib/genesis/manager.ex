@@ -46,12 +46,11 @@ defmodule Genesis.Manager do
   use GenServer
 
   @doc """
-  Clones an entity or prefab from a specified context into the target context.
+  Clones an entity or prefab into the target context.
 
   ## Options
 
-    * `:source` - the source context (required)
-    * `:target` - the target context (defaults to `:source`)
+    * `:target` - the target context (defaults to `entity.context`)
     * `:overrides` - a map of component / properties to override in the cloned entity
 
   See `Genesis.Context.create/2` for additional options.
@@ -59,26 +58,25 @@ defmodule Genesis.Manager do
   ## Examples
 
       # Clone an entity within the same context
-      Genesis.Manager.clone(entity, source: context)
+      Genesis.Manager.clone(entity)
       #=> {:ok, cloned}
 
       # Clone with property overrides
       overrides = %{"health" => %{current: 50}}
-      Genesis.Manager.clone(entity, source: context, overrides: overrides)
+      Genesis.Manager.clone(entity, overrides: overrides)
       #=> {:ok, cloned}
 
       # Clone to a different context
-      Genesis.Manager.clone(entity, source: context, target: context2)
+      Genesis.Manager.clone(entity, target: context2)
       #=> {:ok, cloned}
   """
   def clone(%Genesis.Entity{} = entity, opts \\ []) do
     {overrides, opts} = Keyword.pop(opts, :overrides, %{})
 
     # The common use-case is to clone within the same context.
-    {source_context, opts} = Keyword.pop!(opts, :source)
-    {target_context, opts} = Keyword.pop(opts, :target, source_context)
+    {target_context, opts} = Keyword.pop(opts, :target, entity.context)
 
-    case Genesis.Context.fetch(source_context, entity) do
+    case Genesis.Context.fetch(entity.context, entity) do
       nil ->
         :noop
 

@@ -258,7 +258,6 @@ defmodule Genesis.World do
 
       {prefab, _types, metadata} ->
         options = [
-          source: Genesis.Prefabs,
           target: state.context,
           metadata: metadata,
           overrides: overrides
@@ -311,12 +310,7 @@ defmodule Genesis.World do
 
   @impl true
   def handle_call({:clone, entity, opts}, _from, state) do
-    clone_opts =
-      opts
-      |> Keyword.put(:source, state.context)
-      |> Keyword.put(:target, state.context)
-
-    {:reply, Genesis.Manager.clone(entity, clone_opts), state}
+    {:reply, Genesis.Manager.clone(entity, opts), state}
   end
 
   @impl true
