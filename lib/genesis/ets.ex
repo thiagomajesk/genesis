@@ -9,22 +9,19 @@ defmodule Genesis.ETS do
   def stream(table, transform \\ & &1) do
     start_fun = fn ->
       :ets.safe_fixtable(table, true)
-      :ets.first(table)
+      # Using select seems to be as fast as lookup in most cases if not faster.
+      # It's also significantly more memory efficient for bag tables where you can
+      # have many items per key since we paginate the results and use a continuation.
+      :ets.select(table, [{:"$1", [], [:"$1"]}], 50)
     end
 
     next_fun = fn
       :"$end_of_table" ->
         {:halt, :"$end_of_table"}
 
-      entity ->
-        case :ets.lookup(table, entity) do
-          [] ->
-            {[], :ets.next(table, entity)}
-
-          objects ->
-            entries = Enum.map(objects, transform)
-            {entries, :ets.next(table, entity)}
-        end
+      {objects, continuation} ->
+        entries = Enum.map(objects, transform)
+        {entries, :ets.select(continuation)}
     end
 
     after_fun = fn _ ->
