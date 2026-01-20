@@ -8,7 +8,8 @@ defmodule Genesis.World do
   require Logger
 
   @doc """
-  Starts the World process.
+  Starts the world process.
+  Same as `GenServer.start_link/3`.
   """
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts)
@@ -16,6 +17,15 @@ defmodule Genesis.World do
 
   @doc """
   Sends an event to an entity.
+
+  ## Examples
+
+      Genesis.World.send(world, entity, :move, %{direction: :north})
+      #=> :ok
+
+      Genesis.World.send(world, entity, :damage, %{amount: 10})
+      #=> :ok
+
   """
   def send(world, entity, event, args \\ %{})
 
@@ -42,7 +52,7 @@ defmodule Genesis.World do
   @doc """
   Executes a function with the world context synchronously.
 
-  Differently from `World.context/1`, this allows for safe context operations
+  Differently from `context/1`, this allows for safe context operations
   since it's executed synchronously within the world server itself. The function
   must return a value that will be replied back to the caller.
 
@@ -58,6 +68,12 @@ defmodule Genesis.World do
 
   @doc """
   Creates a new entity in the world.
+
+  ## Examples
+
+      Genesis.World.create(world)
+      #=> {:ok, entity}
+
   """
   def create(world) do
     GenServer.call(world, :create)
@@ -67,6 +83,15 @@ defmodule Genesis.World do
   Creates a new entity from a prefab.
   The prefab must be registered before it can be used.
   Optionally, you can provide overrides to modify component properties.
+
+  ## Examples
+
+      Genesis.World.create(world, "Player")
+      #=> {:ok, entity}
+
+      Genesis.World.create(world, "Player", %{"health" => %{current: 50}})
+      #=> {:ok, entity}
+
   """
   def create(world, name, overrides \\ %{}) do
     GenServer.call(world, {:create, name, overrides})
@@ -149,11 +174,11 @@ defmodule Genesis.World do
 
   ## Examples
 
-      iex> Genesis.World.list(world, format_as: :list)
-      [{entity, [%Health{current: 100}]}]
+      Genesis.World.list(world, format_as: :list)
+      #=> [{entity, [%Health{current: 100}]}]
 
-      iex> Genesis.World.list(world, format_as: :map)
-      [{entity, %{"health" => %Health{current: 100}}}]
+      Genesis.World.list(world, format_as: :map)
+      #=> [{entity, %{"health" => %Health{current: 100}}}]
   """
   def list(world, opts \\ []) do
     GenServer.call(world, {:list, opts})

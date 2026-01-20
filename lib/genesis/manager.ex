@@ -1,6 +1,46 @@
 defmodule Genesis.Manager do
   @moduledoc """
   Manages the registration and lifecycle of components and prefabs.
+
+  ## Components
+
+  Genesis components are also entities with the exception they don't belong to a specific world.
+  They are registered globally and are available through a named context called `Genesis.Components`.
+  You can see all the registered components by calling `components/0`.
+
+  Components can be registered with the `register_components/1` function which accepts a list of modules that implement
+  the `Genesis.Component` behaviour. When components are registered, their order and some additional information is stored
+  in a [`persistent_term`](https://www.erlang.org/doc/apps/erts/persistent_term.html) for efficient lookup during event dispatching.
+  This means that this function is expensive and should not be called frequently - ideally once during application startup.
+
+      Genesis.Manager.register_components([
+        MyApp.Components.Health,
+        MyApp.Components.Position,
+        MyApp.Components.Velocity
+      ])
+
+  > #### The order of registration matters {: .info }
+  > The order of registration also defines the order in which event are handled by components.
+  This means that if both `Health` and `Position` components handle the `:damage` event,
+  `Health` will always handle that event before `Position` and so on.
+
+  ## Prefabs
+
+  Prefabs are reusable entity templates that define a set of components with default properties.
+  They allow you to quickly spawn entities with predefined characteristics. Like components, prefabs are also
+  represented internally as entities and they also have a dedicated global named context called `Genesis.Prefabs`.
+  Prefab registration can be done with the `register_prefab/1` function. This function accepts a map with the prefab
+  definition including its name and components with their default properties.
+
+      Genesis.Manager.register_prefab(%{
+        name: "Spaceship",
+        components: %{
+          "health" => %{current: 100, maximum: 100},
+          "velocity" => %{acceleration: 10, max_speed: 50}
+        }
+      })
+
+  See the dedicated documentation for `Genesis.Prefab` for more details on prefab definitions.
   """
 
   use GenServer
@@ -10,11 +50,26 @@ defmodule Genesis.Manager do
 
   ## Options
 
-    * `:source` - the source context PID (required)
-    * `:target` - the target context PID (defaults to source context)
-    * `:overrides` - a map of component properties to override in the cloned entity
+    * `:source` - the source context (required)
+    * `:target` - the target context (defaults to `:source`)
+    * `:overrides` - a map of component / properties to override in the cloned entity
 
   See `Genesis.Context.create/2` for additional options.
+
+  ## Examples
+
+      # Clone an entity within the same context
+      Genesis.Manager.clone(entity, source: context)
+      #=> {:ok, cloned}
+
+      # Clone with property overrides
+      overrides = %{"health" => %{current: 50}}
+      Genesis.Manager.clone(entity, source: context, overrides: overrides)
+      #=> {:ok, cloned}
+
+      # Clone to a different context
+      Genesis.Manager.clone(entity, source: context, target: context2)
+      #=> {:ok, cloned}
   """
   def clone(%Genesis.Entity{} = entity, opts \\ []) do
     {overrides, opts} = Keyword.pop(opts, :overrides, %{})
@@ -48,11 +103,19 @@ defmodule Genesis.Manager do
 
   ## Examples
 
-      iex> Genesis.Manager.components(index: :name)
-      %{"health" => Health, "position" => Position}
+      Genesis.Manager.register_components([Health, Position])
+      #=> :ok
 
-      iex> Genesis.Manager.components(index: :type)
-      %{Health => "health", Position => "position"}
+      # Index by component name (default)
+      Genesis.Manager.components()
+      #=> %{"health" => Health, "position" => Position}
+
+      Genesis.Manager.components(index: :name)
+      #=> %{"health" => Health, "position" => Position}
+
+      # Index by component type
+      Genesis.Manager.components(index: :type)
+      #=> %{Health => "health", Position => "position"}
   """
   def components(opts \\ []) do
     stream = Genesis.Context.metadata(Genesis.Components)
@@ -76,8 +139,13 @@ defmodule Genesis.Manager do
   @doc """
   Returns a stream of prefabs registered in the manager.
 
-      iex> Genesis.Manager.prefabs() |> Enum.to_list()
-      [{"Being", %Genesis.Prefab{components: components}}]
+  ## Examples
+
+      Genesis.Manager.register_prefab(%{name: "X-Wing", components: ...})
+      #=> {:ok, entity, [...]}
+
+      Genesis.Manager.prefabs() |> Enum.to_list()
+      #=> [{"X-Wing", %Genesis.Prefab{name: "X-Wing", components: [...]}}]
   """
   def prefabs do
     stream = Genesis.Context.entities(Genesis.Prefabs)
@@ -90,18 +158,31 @@ defmodule Genesis.Manager do
 
   @doc """
   Returns all event handlers registered in the manager.
+
+  ## Examples
+
+      Genesis.Manager.register_components([Health, Position])
+      #=> :ok
+
+      Genesis.Manager.handlers()
+      #=> [damage: [Health], move: [Position], heal: [Health]]
   """
   def handlers, do: events_lookup_get()
 
   @doc """
   Returns the handlers registered for a specific event.
+  Same as `handlers/0` but filters by the specified event.
   """
   def handlers(event) when is_atom(event), do: events_lookup_get(event)
 
   @doc """
   Registers component modules.
+  Components must implement the `Genesis.Component` behaviour.
 
-      iex> Genesis.Manager.register_components([Health, Position])
+  ## Examples
+
+      Genesis.Manager.register_components([Health, Position, Velocity])
+      #=> :ok
   """
   def register_components(components) when is_list(components) do
     registered = Enum.map(components, &register_component!/1)
@@ -111,6 +192,14 @@ defmodule Genesis.Manager do
   @doc """
   Registers a new prefab definition.
   Prefabs are templates for creating entities with predefined components and properties.
+
+  ## Examples
+
+      Genesis.Manager.register_prefab(%{name: "Spaceship", components: ...})
+      #=> {:ok, entity, [%Health{current: 50, maximum: 100}]}
+
+      Genesis.Manager.register_prefab(%{name: "Spaceship", components: ...})
+      #=> {:error, :already_registered}
   """
   def register_prefab(attrs) when is_map(attrs) do
     %{name: name, extends: extends, components: components} = Genesis.Prefab.load(attrs)

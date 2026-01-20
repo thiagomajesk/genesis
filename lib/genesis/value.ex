@@ -1,4 +1,7 @@
 defmodule Genesis.Value do
+  @moduledoc """
+  Helper functions to handle property values for Components.
+  """
   @valid_types [:any, :atom, :string, :boolean, :float, :integer]
 
   @doc """

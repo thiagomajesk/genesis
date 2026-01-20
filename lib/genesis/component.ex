@@ -1,9 +1,77 @@
 defmodule Genesis.Component do
   @moduledoc """
   Provides common behavior and callbacks for components.
+
   Components are modular pieces of state and behavior that can be attached to entities.
+  ## Defining a component
+
+  Defining a component is as simple as creating a module that uses `Genesis.Component`.
+  Then, you define which properties the component should have by using the `prop` macro.
+
+  You can also specify which events the component should handle by passing the `:events` option.
+
+      defmodule MyApp.Components.Health do
+        use Genesis.Component, events: [:damage]
+
+        prop :current, :integer, default: 100
+        prop :maximum, :integer, default: 100
+      end
+
+  ## Handling Events
+
+  Components can respond to events dispatched to their entity. When handling events you must
+  return either `{:cont, event}` to continue processing or `{:halt, event}` to stop propagation.
+  Here's a naive example of how one could handle a damage event to update an entity's health:
+
+      def handle_event(:damage, event) do
+        %{args: %{amount: amount}} = event
+
+        # Get the current health component
+        health = get(event.entity)
+
+        # Reduces the current health by the damage amount
+        update(event.entity, :current, & &1 - amount)
+
+        {:cont, event}
+      end
+
+  You can also do interesting things like dispatching more events or transforming
+  the arguments before it gets processes by other components. For instance, imagine
+  you have a `FireShield` component that halves the damage taken from fire attacks:
+
+      def handle_event(:damage, event) do
+        %{args: %{type: type, amount: amount}} = event
+        final_damage = if type == :fire, do: amount / 2, else: amount
+        {:cont, put_in(event, [:args, :amount], final_damage)}
+      end
+
+
+  ## Lifecycle Hooks
+
+  Components can also react to lifecycle events using the `on_hook/3` callback:
+
+      defmodule MyApp.Components.Logger do
+        use Genesis.Component
+
+        require Logger
+
+        def on_hook(:attached, entity, component) do
+          Logger.info("Component attached to entity: \#{entity.hash}")
+        end
+
+        def on_hook(:removed, entity, component) do
+          Logger.info("Component removed from entity: \#{entity.hash}")
+        end
+
+        def on_hook(:updated, entity, component) do
+          Logger.info("Component updated on entity: \#{entity.hash}")
+        end
+      end
   """
 
+  @type event :: Genesis.Event.t()
+  @type component :: struct()
+  @type entity :: Genesis.Entity.t()
   @type properties :: keyword() | map()
 
   @optional_callbacks handle_event: 2
@@ -11,14 +79,25 @@ defmodule Genesis.Component do
   @doc """
   Creates a new component by casting the given properties.
   The given properties are passed to the `cast/1` function.
+
+  ## Examples
+
+      # Using default values
+      health = Health.new()
+
+      # Using a map
+      health = Health.new(%{current: 80, maximum: 100})
+
+      # Using a keyword list
+      health = Health.new(current: 80, maximum: 100)
   """
-  @callback new(properties()) :: struct()
+  @callback new(properties()) :: component()
 
   @doc """
   Called when a component is `:attached`, `:removed` or `:updated` on an entity.
   Receives the hook name, the entity, and the component struct that triggered the hook.
   """
-  @callback on_hook(atom(), Genesis.Entity.t(), struct()) :: any()
+  @callback on_hook(atom(), entity(), component()) :: any()
 
   @doc """
   Casts the given properties into a map of permitted values.
@@ -32,39 +111,103 @@ defmodule Genesis.Component do
 
   Returns `:ok` if the component was successfully attached, `:noop` if a component with the same properties
   is already attached, or `:error` if the same component with different properties is already attached.
+
+  ## Examples
+
+      Health.attach(entity)
+      #=> :ok
+
+      Position.attach(entity, x: 10, y: 20)
+      #=> :ok
+
+      Position.attach(entity, x: 10, y: 20)
+      #=> :noop
+
+      Position.attach(entity, x: 15, y: 25)
+      #=> :error
+
   """
-  @callback attach(Genesis.Entity.t(), properties()) :: :ok | :noop | :error
+  @callback attach(entity(), properties()) :: :ok | :noop | :error
 
   @doc """
   Retrieves a component from an entity.
 
   Returns the component struct if present or the default value.
+
+  ## Examples
+
+      Health.get(entity)
+      #=> %Health{...}
+
+      Position.get(entity)
+      #=> nil
+
+      Position.get(entity, Position.new())
+      #=> %Position{...}
   """
-  @callback get(Genesis.Entity.t(), any()) :: struct() | any()
+  @callback get(entity(), default :: any()) :: component() | any()
 
   @doc """
   Updates a component attached to an entity by merging the given properties.
   If the entity belongs to a world, the update is performed within the world's context.
 
-  Will return `:noop` if the component is not present or `:error` if the component cannot be replaced.
+  Will return `:ok` on success or `:noop` if the component is not present.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+      Health.attach(entity, current: 80, maximum: 100)
+
+      Health.update(entity, current: 50)
+      #=> :ok
+
+      Position.update(entity, x: 15, y: 25)
+      #=> :noop
   """
-  @callback update(Genesis.Entity.t(), properties()) :: :ok | :noop | :error
+  @callback update(entity(), properties()) :: :ok | :noop | :error
 
   @doc """
   Updates a specific property of a component attached to the entity.
   If the entity belongs to a world, the update is performed within the world's context.
 
   Will return `:noop` if the component is not present or `:error` if the property does not exist.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+      Health.attach(entity, current: 80, maximum: 100)
+
+      Health.update(entity, :current, & &1 + 10)
+      #=> :ok
+
+      Position.update(entity, :x, & &1 + 5)
+      #=> :noop
+
+      # Trying to update a non-existing property
+      Health.update(entity, :invalid, & &1 + 10)
+      #=> :error
   """
-  @callback update(Genesis.Entity.t(), atom(), fun()) :: :ok | :noop | :error
+  @callback update(entity(), atom(), fun()) :: :ok | :noop | :error
 
   @doc """
   Removes a component from an entity.
-  If the entity belongs to a world, the removal is performed within the world's context.
+  If the entity belongs to a world, the removal is performed using the world's context.
 
   Returns `:noop` if the component is not present.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+      Health.attach(entity, current: 80, maximum: 100)
+
+      Health.remove(entity)
+      #=> :ok
+
+      Position.remove(entity)
+      #=> :noop
+
   """
-  @callback remove(Genesis.Entity.t()) :: :ok | :noop
+  @callback remove(entity()) :: :ok | :noop
 
   @doc """
   Handles events dispatched to this component via its parent entity.
@@ -73,8 +216,8 @@ defmodule Genesis.Component do
   function should return a tuple with `:cont` or `:halt` to either keep processing
   the event or stop propagating the event to the remaining components in the pipeline.
   """
-  @callback handle_event(atom(), Genesis.Event.t()) ::
-              {:cont, Genesis.Event.t()} | {:halt, Genesis.Event.t()}
+  @callback handle_event(atom(), event()) ::
+              {:cont, event()} | {:halt, event()}
 
   defmacro __using__(opts \\ []) do
     quote bind_quoted: [opts: opts] do

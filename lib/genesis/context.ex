@@ -4,25 +4,34 @@ defmodule Genesis.Context do
   @moduledoc """
   Provides low-level entity storage backed by ETS.
 
-  A context contains three ETS tables that are always kept in sync.
+  A context contains the following ETS tables that are always kept in sync.
 
     * `mtable` - table that stores metadata associated with entities
     * `ctable` - table that stores components associated with entities
     * `nindex` - table that stores metadata indexed by name
     * `tindex` - table that stores components indexed by type
 
-  NOTE: most read operations are intentionally dirty reads for performance reasons.
+  Note that most read operations are intentionally dirty reads for performance reasons.
   """
 
   use GenServer
 
   import Genesis.Utils, only: [is_non_empty_pairs: 1, is_min_max: 2]
 
+  @doc """
+  Starts a new `Genesis.Context`.
+  Same as `GenServer.start_link/3`.
+  """
+  @doc group: "Process API"
   def start_link(args \\ []) do
-    name = Keyword.get(args, :name)
-    GenServer.start_link(__MODULE__, args, name: name)
+    GenServer.start_link(__MODULE__, args, args)
   end
 
+  @doc """
+  Returns a specification to start a context under a supervisor.
+
+  See `Supervisor`.
+  """
   def child_spec(args) do
     id = Keyword.get(args, :name, __MODULE__)
     restart = Keyword.get(args, :restart, :temporary)
@@ -40,11 +49,23 @@ defmodule Genesis.Context do
   Creates a new entity in the context with the given options.
 
   Options:
-    * `:name` - an optional name for the entity
-    * `:metadata` - an optional map of metadata to associate with the entity
+    * `:name` - registers the entity under the given name (optional)
+    * `:metadata` - associates metadata to the entity (optional)
 
   See `Genesis.Entity.new/1` for additional options.
   Note that the created entity has its context set automatically.
+
+  ## Examples
+
+      # Create an entity
+      Genesis.Context.create(context)
+      #=> {:ok, entity}
+
+      # Create a named entity with metadata
+      Genesis.Context.create(context,
+        name: "Shopkeeper",
+        metadata: %{faction: :alliance}
+      )
   """
   def create(context, opts \\ []) do
     GenServer.call(context, {:create, opts})
@@ -53,7 +74,13 @@ defmodule Genesis.Context do
   @doc """
   Retrieves information about an entity.
   Returns `{entity, types, metadata}` if found, or `nil`.
+
+  ## Examples
+
+      Genesis.Context.info(context, entity)
+      #=> {entity, [], %{}}
   """
+  @doc group: "Query API"
   def info(context, %Genesis.Entity{} = entity) do
     mtable = table!(context, :mtable)
 
@@ -69,6 +96,12 @@ defmodule Genesis.Context do
   @doc """
   Associates a component to an entity, fails if the component type is already present.
   Returns `:ok` on success, or `{:error, reason}` on failure.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+
+      Genesis.Context.emplace(context, entity, %Position{x: 10, y: 20})
   """
   def emplace(context, %Genesis.Entity{} = entity, component) when is_struct(component) do
     GenServer.call(context, {:emplace, entity, component})
@@ -77,6 +110,14 @@ defmodule Genesis.Context do
   @doc """
   Replaces an existing component on an entity.
   Returns `:ok` on success, or `{:error, reason}` on failure.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+      Genesis.Context.emplace(context, entity, %Position{x: 0, y: 0})
+
+      # Replaces the position component entirely
+      Genesis.Context.replace(context, entity, %Position{x: 10, y: 20})
   """
   def replace(context, %Genesis.Entity{} = entity, component) when is_struct(component) do
     GenServer.call(context, {:replace, entity, component})
@@ -92,15 +133,28 @@ defmodule Genesis.Context do
   @doc """
   Replaces the metadata of an entity.
   Returns `:ok` on success, or `{:error, reason}` on failure.
+
+  ## Examples
+
+      metadata = %{created_at: System.system_time()}
+      Genesis.Context.patch(context, entity, metadata)
   """
   def patch(context, %Genesis.Entity{} = entity, metadata) when is_map(metadata) do
     GenServer.call(context, {:patch, entity, metadata})
   end
 
   @doc """
-  Erases all components of an entity.
-  When the `component_type` is provided, only that component is erased.
+  Removes components from an entity.
+  When the `component_type` is provided, only that component is removed.
   Returns `:ok` on success, or `{:error, reason}` on failure.
+
+  ## Examples
+
+      # Removes a specific component from the entity
+      Genesis.Context.erase(context, entity, Health)
+
+      # Removes all components from the entity
+      Genesis.Context.erase(context, entity)
   """
   def erase(context, %Genesis.Entity{} = entity, component_type \\ nil)
       when is_atom(component_type) do
@@ -109,7 +163,15 @@ defmodule Genesis.Context do
 
   @doc """
   Assigns components to an existing entity.
+  Components of the same type will be replaced.
   Returns `:ok` on success, or `{:error, reason}` on failure.
+
+  ## Examples
+
+      {:ok, entity} = Genesis.Context.create(context)
+
+      components = [%Health{current: 100, maximum: 100}]
+      Genesis.Context.assign(context, entity, components)
   """
   def assign(context, %Genesis.Entity{} = entity, components) when is_list(components) do
     GenServer.call(context, {:assign, entity, components})
@@ -126,7 +188,16 @@ defmodule Genesis.Context do
   @doc """
   Looks up an entity by a registered name.
   Returns `{entity, types, metadata}` if found, or `nil`.
+
+  ## Examples
+
+      {:ok, npc} = Genesis.Context.create(context, name: "Shopkeeper")
+      Genesis.Context.emplace(context, npc, %Health{current: 100})
+
+      Genesis.Context.lookup(context, "Shopkeeper")
+      #=> {entity, [Health], %{created_at: 1234567890}}
   """
+  @doc group: "Query API"
   def lookup(context, name) when is_binary(name) do
     mtable = table!(context, :mtable)
     nindex = table!(context, :nindex)
@@ -140,7 +211,16 @@ defmodule Genesis.Context do
   @doc """
   Checks if an entity or name exists in the context.
   Returns `true` if found, or `false` otherwise.
+
+  ## Examples
+
+      # Using an entity
+      Genesis.Context.exists?(context, entity)
+
+      # Using a name
+      Genesis.Context.exists?(context, "Player")
   """
+  @doc group: "Query API"
   def exists?(context, entity_or_name)
 
   def exists?(context, %Genesis.Entity{} = entity) do
@@ -154,7 +234,18 @@ defmodule Genesis.Context do
   @doc """
   Fetches all components of an entity.
   Returns `{entity, components}` if found, or `nil`.
+
+  ## Examples
+
+      # Fetch by entity
+      Genesis.Context.fetch(context, entity)
+      #=> {entity, [%Health{current: 100}, %Position{x: 10, y: 20}]}
+
+      # Fetch by name
+      Genesis.Context.fetch(context, "Enemy")
+      #=> {#Entity<9876543>, [%Health{current: 50}, %Position{x: 5, y: 15}]}
   """
+  @doc group: "Query API"
   def fetch(context, entity_or_name)
 
   def fetch(context, name) when is_binary(name) do
@@ -182,8 +273,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.all(context, Health)
-      [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
+      #=> [{entity_1, %Health{current: 100}}, {entity_2, %Health{current: 50}}]
   """
+  @doc group: "Query API"
   def all(context, component_type) when is_atom(component_type) do
     tindex = table!(context, :tindex)
 
@@ -203,8 +295,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.get(context, entity_1, Health)
-      %Health{current: 100}
+      #=> %Health{current: 100}
   """
+  @doc group: "Query API"
   def get(context, %Genesis.Entity{} = entity, component_type, default \\ nil)
       when is_atom(component_type) do
     ctable = table!(context, :ctable)
@@ -229,8 +322,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.match(context, Moniker, name: "Tripida")
-      [{entity_1, %Moniker{name: "Tripida"}}]
+      #=> [{entity_1, %Moniker{name: "Tripida"}}]
   """
+  @doc group: "Query API"
   def match(context, component_type, properties)
       when is_atom(component_type) and is_non_empty_pairs(properties) do
     tindex = table!(context, :tindex)
@@ -255,8 +349,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.at_least(context, Health, :current, 50)
-      [{entity_1, %Health{current: 75}}]
+      #=> [{entity_1, %Health{current: 75}}]
   """
+  @doc group: "Query API"
   def at_least(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
     tindex = table!(context, :tindex)
@@ -276,8 +371,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.at_most(context, Health, :current, 50)
-      [{entity_1, %Health{current: 25}}]
+      #=> [{entity_1, %Health{current: 25}}]
   """
+  @doc group: "Query API"
   def at_most(context, component_type, property, value)
       when is_atom(component_type) and is_atom(property) do
     tindex = table!(context, :tindex)
@@ -297,8 +393,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.between(context, Health, :current, 50, 100)
-      [{entity_1, %Health{current: 75}}]
+      #=> [{entity_1, %Health{current: 75}}]
   """
+  @doc group: "Query API"
   def between(context, component_type, property, min, max)
       when is_atom(component_type) and is_atom(property) and is_min_max(min, max) do
     tindex = table!(context, :tindex)
@@ -322,8 +419,9 @@ defmodule Genesis.Context do
   ## Examples
 
       iex> Genesis.Context.children_of(context, entity_1)
-      [entity_2, entity_3, entity_4, ...]
+      #=> [entity_2, entity_3, entity_4, ...]
   """
+  @doc group: "Query API"
   def children_of(context, %Genesis.Entity{} = entity) do
     mtable = table!(context, :mtable)
 
@@ -341,9 +439,10 @@ defmodule Genesis.Context do
 
   ## Examples
 
-      iex> Genesis.Context.all_of(context, [Component1, Component2])
-      [entity_1, entity_2]
+      iex> Genesis.Context.all_of(context, [Health, Velocity])
+      #=> [entity_1, entity_2]
   """
+  @doc group: "Query API"
   def all_of(context, component_types) when is_list(component_types) do
     search(context, all: component_types)
   end
@@ -353,9 +452,10 @@ defmodule Genesis.Context do
 
   ## Examples
 
-      iex> Genesis.Context.any_of(context, [Component1, Component2])
-      [entity_1, entity_2, entity_3]
+      iex> Genesis.Context.any_of(context, [Health, Velocity])
+      #=> [entity_1, entity_2, entity_3]
   """
+  @doc group: "Query API"
   def any_of(context, component_types) when is_list(component_types) do
     search(context, any: component_types)
   end
@@ -365,9 +465,10 @@ defmodule Genesis.Context do
 
   ## Examples
 
-      iex> Genesis.Context.none_of(context, [Component1, Component2])
-      [entity_1, entity_2]
+      iex> Genesis.Context.none_of(context, [Health, Velocity])
+      #=> [entity_1, entity_2]
   """
+  @doc group: "Query API"
   def none_of(context, component_types) when is_list(component_types) do
     search(context, none: component_types)
   end
@@ -381,6 +482,7 @@ defmodule Genesis.Context do
     * `:any` - Matches entities that have at least one of the specified components.
     * `:none` - Matches entities that do not have any of the specified components.
   """
+  @doc group: "Query API"
   def search(context, opts) when is_list(opts) do
     all = Keyword.get(opts, :all)
     any = Keyword.get(opts, :any)
@@ -400,7 +502,9 @@ defmodule Genesis.Context do
 
   @doc """
   Returns a stream of all metadata entries in the context.
+  Note that this function will cause the entire table to be iterated.
   """
+  @doc group: "Introspection API"
   def metadata(context) do
     mtable = table!(context, :mtable)
 
@@ -413,7 +517,9 @@ defmodule Genesis.Context do
 
   @doc """
   Returns a stream of all component entries in the context.
+  Note that this function will cause the entire table to be iterated.
   """
+  @doc group: "Introspection API"
   def components(context) do
     ctable = table!(context, :ctable)
 
@@ -426,7 +532,9 @@ defmodule Genesis.Context do
 
   @doc """
   Returns a stream of entities with their components grouped together.
+  Note that this function will cause the entire table to be iterated.
   """
+  @doc group: "Introspection API"
   def entities(context) do
     mtable = table!(context, :mtable)
     ctable = table!(context, :ctable)
