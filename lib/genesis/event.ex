@@ -10,7 +10,7 @@ defmodule Genesis.Event do
 
     * `:name` - The unique event identifier
     * `:entity` - The target entity this event was sent to
-    * `:world` - The world where the entity was spawned in
+    * `:world` - The world that dispatched the event
     * `:from` - The caller that sent the event to the entity
     * `:timestamp` - The event creation timestamp
     * `:args` - Additional event-specific data
