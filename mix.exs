@@ -32,7 +32,7 @@ defmodule Genesis.MixProject do
       maintainers: ["Thiago Majesk Goulart"],
       licenses: ["AGPL-3.0-only"],
       links: %{"GitHub" => @url},
-      files: ~w(lib mix.exs README.md)
+      files: ~w(lib mix.exs .formatter.exs README.md)
     ]
   end
 
