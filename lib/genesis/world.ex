@@ -224,7 +224,7 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:send, entity, {event, args}}, {pid, _tag}, state) do
+  def handle_call({:send, entity, {event, args}}, _from, state) do
     case lookup_handlers(entity, state, event) do
       [] ->
         {:reply, :noop, state}
@@ -232,7 +232,6 @@ defmodule Genesis.World do
       handlers ->
         Genesis.Herald.notify(state.herald, %Genesis.Event{
           name: event,
-          from: pid,
           args: args,
           world: self(),
           entity: entity,

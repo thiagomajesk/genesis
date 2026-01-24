@@ -9,7 +9,7 @@ defmodule Genesis.GenesisTest do
 
     def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
-      send(event.from, {__MODULE__, event.entity, DateTime.utc_now()})
+      send(event.args.from, {__MODULE__, event.entity, DateTime.utc_now()})
       {:cont, event}
     end
   end
@@ -19,7 +19,7 @@ defmodule Genesis.GenesisTest do
 
     def handle_event(_name, event) do
       Process.sleep(Map.get(event.args, :delay, 0))
-      send(event.from, {__MODULE__, event.entity, DateTime.utc_now()})
+      send(event.args.from, {__MODULE__, event.entity, DateTime.utc_now()})
       {:cont, event}
     end
   end
@@ -41,7 +41,7 @@ defmodule Genesis.GenesisTest do
 
     # Components handling the same event will process the event
     # respecting the registration order (i.e: Ping -> Pong)
-    World.send(world, entity, :check)
+    World.send(world, entity, :check, %{from: self()})
 
     assert_receive {Ping, ^entity, ping_time}
     assert_receive {Pong, ^entity, pong_time}
@@ -59,8 +59,8 @@ defmodule Genesis.GenesisTest do
 
     # Simulate latency for Ping to prove that components will
     # always be processed sequentially for the same entity
-    World.send(world, entity, :ping, %{delay: 50})
-    World.send(world, entity, :pong)
+    World.send(world, entity, :ping, %{delay: 50, from: self()})
+    World.send(world, entity, :pong, %{from: self()})
 
     assert_receive {Ping, ^entity, ping_time}
     assert_receive {Pong, ^entity, pong_time}
@@ -82,8 +82,8 @@ defmodule Genesis.GenesisTest do
 
     # Simulate latency to prove that components for different entities
     # are always processed concurrently and not waiting on each other
-    World.send(world, entity_1, :check, %{delay: :infinity})
-    World.send(world, entity_2, :check)
+    World.send(world, entity_1, :check, %{delay: :infinity, from: self()})
+    World.send(world, entity_2, :check, %{from: self()})
 
     # Sanity check, to ensure that events are really blocked
     refute_receive {Ping, ^entity_1, _entity_1_ping_time}

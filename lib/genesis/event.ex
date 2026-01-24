@@ -11,19 +11,17 @@ defmodule Genesis.Event do
     * `:name` - The unique event identifier
     * `:entity` - The target entity this event was sent to
     * `:world` - The world that dispatched the event
-    * `:from` - The caller that sent the event to the entity
     * `:timestamp` - The event creation timestamp
     * `:args` - Additional event-specific data
     * `:handlers` - The list of modules that will handle the event
   """
-  @enforce_keys [:name, :world, :entity, :from, :timestamp]
-  defstruct [:name, :world, :entity, :from, :timestamp, args: %{}, handlers: []]
+  @enforce_keys [:name, :world, :entity, :timestamp]
+  defstruct [:name, :world, :entity, :timestamp, args: %{}, handlers: []]
 
   @type t :: %__MODULE__{
           name: atom(),
           world: pid(),
           entity: Genesis.Entity.t(),
-          from: pid(),
           timestamp: integer(),
           args: map(),
           handlers: list(module())
