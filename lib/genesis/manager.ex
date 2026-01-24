@@ -78,7 +78,7 @@ defmodule Genesis.Manager do
 
     case Genesis.Context.fetch(entity.context, entity) do
       nil ->
-        :noop
+        {:error, :entity_not_found}
 
       {_entity, components} ->
         create_opts = Keyword.put(opts, :parent, entity)

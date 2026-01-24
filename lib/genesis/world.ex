@@ -104,7 +104,29 @@ defmodule Genesis.World do
   end
 
   @doc """
-  Same as `Genesis.World.fetch/2` but scoped to the world.
+  Same as `create/1` but raises on error.
+  Returns the created entity on success.
+  """
+  def create!(world) do
+    case create(world) do
+      {:ok, entity} -> entity
+      {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Same as `create/3` but raises on error.
+  Returns the created entity on success.
+  """
+  def create!(world, name_or_prefab, overrides \\ %{}) do
+    case create(world, name_or_prefab, overrides) do
+      {:ok, entity} -> entity
+      {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Same as `fetch/2` but scoped to the world.
   """
   def fetch(world, entity) do
     GenServer.call(world, {:fetch, entity})
@@ -255,7 +277,7 @@ defmodule Genesis.World do
 
     case Genesis.Context.lookup(Genesis.Prefabs, name) do
       nil ->
-        {:reply, :noop, state}
+        {:reply, {:error, :prefab_not_found}, state}
 
       {prefab, _types, _metadata} ->
         {:reply, Genesis.Manager.clone(prefab, clone_opts), state}
@@ -268,7 +290,7 @@ defmodule Genesis.World do
 
     if Genesis.Entity.prefab?(prefab),
       do: {:reply, Genesis.Manager.clone(prefab, clone_opts), state},
-      else: {:reply, :noop, state}
+      else: {:reply, {:error, :invalid_prefab}, state}
   end
 
   @impl true
