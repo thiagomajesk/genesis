@@ -99,8 +99,12 @@ defmodule Genesis.World do
   """
   def create(world, name_or_prefab, overrides \\ %{})
 
-  def create(world, name_or_prefab, overrides) do
-    GenServer.call(world, {:create, name_or_prefab, overrides})
+  def create(world, name, overrides) when is_binary(name) do
+    GenServer.call(world, {:create_from_name, name, overrides})
+  end
+
+  def create(world, %Genesis.Entity{} = prefab, overrides) do
+    GenServer.call(world, {:create_from_entity, prefab, overrides})
   end
 
   @doc """
@@ -118,8 +122,17 @@ defmodule Genesis.World do
   Same as `create/3` but raises on error.
   Returns the created entity on success.
   """
-  def create!(world, name_or_prefab, overrides \\ %{}) do
-    case create(world, name_or_prefab, overrides) do
+  def create!(world, name_or_prefab, overrides \\ %{})
+
+  def create!(world, name, overrides) when is_binary(name) do
+    case GenServer.call(world, {:create_from_name, name, overrides}) do
+      {:ok, entity} -> entity
+      {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
+    end
+  end
+
+  def create!(world, %Genesis.Entity{} = prefab, overrides) do
+    case GenServer.call(world, {:create_from_entity, prefab, overrides}) do
       {:ok, entity} -> entity
       {:error, reason} -> raise "Failed to create entity: #{inspect(reason)}"
     end
@@ -272,7 +285,7 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:create, name, overrides}, _from, state) when is_binary(name) do
+  def handle_call({:create_from_name, name, overrides}, _from, state) do
     clone_opts = [target: state.context, overrides: overrides]
 
     case Genesis.Context.lookup(Genesis.Prefabs, name) do
@@ -285,7 +298,7 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:create, %Genesis.Entity{} = prefab, overrides}, _from, state) do
+  def handle_call({:create_from_entity, prefab, overrides}, _from, state) do
     clone_opts = [target: state.context, overrides: overrides]
 
     if Genesis.Entity.prefab?(prefab),
