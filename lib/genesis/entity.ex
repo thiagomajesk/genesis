@@ -76,6 +76,11 @@ defmodule Genesis.Entity do
   def named?(%Entity{name: name}), do: not is_nil(name)
 
   @doc """
+  Returns true when the entity is a prefab.
+  """
+  def prefab?(%Entity{context: context}), do: Process.whereis(Genesis.Prefabs) == context
+
+  @doc """
   Returns true when the entity is a child of another entity.
   """
   def child?(%Entity{parent: parent}), do: not is_nil(parent)

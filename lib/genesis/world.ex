@@ -86,15 +86,21 @@ defmodule Genesis.World do
 
   ## Examples
 
+      # Using a prefab name
       Genesis.World.create(world, "Player")
+      #=> {:ok, entity}
+
+      # Or using a prefab entity directly
+      Genesis.World.create(world, prefab)
       #=> {:ok, entity}
 
       Genesis.World.create(world, "Player", %{"health" => %{current: 50}})
       #=> {:ok, entity}
-
   """
-  def create(world, name, overrides \\ %{}) do
-    GenServer.call(world, {:create, name, overrides})
+  def create(world, name_or_prefab, overrides \\ %{})
+
+  def create(world, name_or_prefab, overrides) do
+    GenServer.call(world, {:create, name_or_prefab, overrides})
   end
 
   @doc """
@@ -250,20 +256,25 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def handle_call({:create, name, overrides}, _from, state) do
+  def handle_call({:create, name, overrides}, _from, state) when is_binary(name) do
+    clone_opts = [target: state.context, overrides: overrides]
+
     case Genesis.Context.lookup(Genesis.Prefabs, name) do
       nil ->
         {:reply, :noop, state}
 
-      {prefab, _types, metadata} ->
-        options = [
-          target: state.context,
-          metadata: metadata,
-          overrides: overrides
-        ]
-
-        {:reply, Genesis.Manager.clone(prefab, options), state}
+      {prefab, _types, _metadata} ->
+        {:reply, Genesis.Manager.clone(prefab, clone_opts), state}
     end
+  end
+
+  @impl true
+  def handle_call({:create, %Genesis.Entity{} = prefab, overrides}, _from, state) do
+    clone_opts = [target: state.context, overrides: overrides]
+
+    if Genesis.Entity.prefab?(prefab),
+      do: {:reply, Genesis.Manager.clone(prefab, clone_opts), state},
+      else: {:reply, :noop, state}
   end
 
   @impl true

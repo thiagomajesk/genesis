@@ -78,67 +78,70 @@ defmodule Genesis.WorldTest do
     end
   end
 
-  test "create/1", %{world: world} do
-    {:ok, entity} = World.create(world)
+  describe "create" do
+    test "new entity", %{world: world} do
+      {:ok, entity} = World.create(world)
 
-    Health.attach(entity, current: 100)
-    Position.attach(entity, x: 10, y: 20)
-    Moniker.attach(entity, name: "Object")
+      Health.attach(entity, current: 100)
+      Position.attach(entity, x: 10, y: 20)
+      Moniker.attach(entity, name: "Object")
 
-    components = World.fetch(world, entity)
+      components = World.fetch(world, entity)
 
-    assert [
-             %Health{current: 100},
-             %Moniker{name: "Object"},
-             %Position{x: 10, y: 20}
-           ] = Enum.sort(components)
-  end
+      assert [
+               %Health{current: 100},
+               %Moniker{name: "Object"},
+               %Position{x: 10, y: 20}
+             ] = Enum.sort(components)
+    end
 
-  test "create/2", %{world: world} do
-    Manager.register_prefab(%{
-      name: "Being",
-      components: %{
-        "health" => %{current: 100, maximum: 100},
-        "moniker" => %{name: "Being"},
-        "position" => %{x: 10, y: 20},
-        "selectable" => %{}
-      }
-    })
+    test "with prefab name", %{world: world} do
+      Manager.register_prefab(being_prefab_fixture())
+      Manager.register_prefab(human_prefab_fixture())
 
-    Manager.register_prefab(%{
-      name: "Human",
-      extends: ["Being"],
-      components: %{
-        "health" => %{current: 50},
-        "moniker" => %{name: "John Doe"},
-        "position" => %{x: 100, y: 200}
-      }
-    })
+      {:ok, entity} = World.create(world, "Human")
 
-    {:ok, entity} = World.create(world, "Human")
+      components = World.fetch(world, entity)
 
-    components = World.fetch(world, entity)
+      assert [
+               %Selectable{},
+               %Health{current: 50, maximum: 100},
+               %Moniker{name: "John Doe"},
+               %Position{x: 100, y: 200}
+             ] = Enum.sort(components)
+    end
 
-    assert [
-             %Selectable{},
-             %Health{current: 50, maximum: 100},
-             %Moniker{name: "John Doe"},
-             %Position{x: 100, y: 200}
-           ] = Enum.sort(components)
-  end
+    test "with prefab", %{world: world} do
+      Manager.register_prefab(being_prefab_fixture())
 
-  test "create/3", %{world: world} do
-    Manager.register_prefab(%{
-      name: "Item",
-      components: %{
-        "moniker" => %{name: "Potion"}
-      }
-    })
+      # Find the being prefab by name first so we can then use the actual entity on create
+      {being, _types, _metadata} = Genesis.Context.lookup(Genesis.Prefabs, "Being")
 
-    overrides = %{"moniker" => %{name: "Healing Potion"}}
-    {:ok, entity} = World.create(world, "Item", overrides)
+      {:ok, entity} = World.create(world, being)
 
-    assert %Moniker{name: "Healing Potion"} = Moniker.get(entity)
+      components = World.fetch(world, entity)
+
+      assert [
+               %Selectable{},
+               %Health{current: 100, maximum: 100},
+               %Moniker{name: "Being"},
+               %Position{x: 10, y: 20}
+             ] = Enum.sort(components)
+    end
+
+    test "with overrides", %{world: world} do
+      Manager.register_prefab(%{
+        name: "Item",
+        components: %{
+          "moniker" => %{name: "Potion"}
+        }
+      })
+
+      overrides = %{"moniker" => %{name: "Healing Potion"}}
+      {:ok, entity} = World.create(world, "Item", overrides)
+
+      assert %Moniker{name: "Healing Potion"} = Moniker.get(entity)
+    end
   end
 
   test "clone/1", %{world: world} do
@@ -272,5 +275,29 @@ defmodule Genesis.WorldTest do
       assert [{^entity_2, _}] = World.match(world, Health, current: 0, maximum: 100)
       assert [] = World.match(world, Health, invalid: 100)
     end
+  end
+
+  defp being_prefab_fixture do
+    %{
+      name: "Being",
+      components: %{
+        "health" => %{current: 100, maximum: 100},
+        "moniker" => %{name: "Being"},
+        "position" => %{x: 10, y: 20},
+        "selectable" => %{}
+      }
+    }
+  end
+
+  defp human_prefab_fixture do
+    %{
+      name: "Human",
+      extends: ["Being"],
+      components: %{
+        "health" => %{current: 50},
+        "moniker" => %{name: "John Doe"},
+        "position" => %{x: 100, y: 200}
+      }
+    }
   end
 end
