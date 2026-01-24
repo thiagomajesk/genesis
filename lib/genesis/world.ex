@@ -236,14 +236,8 @@ defmodule Genesis.World do
         {:reply, :noop, state}
 
       handlers ->
-        Genesis.Herald.notify(state.herald, %Genesis.Event{
-          name: event,
-          args: args,
-          world: self(),
-          entity: entity,
-          handlers: handlers,
-          timestamp: :erlang.system_time()
-        })
+        event_opts = [world: self(), entity: entity, args: args, handlers: handlers]
+        Genesis.Herald.notify(state.herald, Genesis.Event.new(event, event_opts))
 
         {:reply, :ok, state}
     end

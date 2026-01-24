@@ -28,6 +28,24 @@ defmodule Genesis.Event do
           handlers: list(module())
         }
 
+  @doc false
+  def new(name, opts) do
+    world = Keyword.fetch!(opts, :world)
+    entity = Keyword.fetch!(opts, :entity)
+
+    args = Keyword.get(opts, :args, %{})
+    handlers = Keyword.get(opts, :handlers, [])
+
+    %__MODULE__{
+      args: args,
+      name: name,
+      world: world,
+      entity: entity,
+      handlers: handlers,
+      timestamp: :erlang.system_time()
+    }
+  end
+
   @doc """
   Processes a list of events by invoking their respective handlers in order.
   Each handler can choose to continue processing the event or halt further processing.
@@ -36,10 +54,15 @@ defmodule Genesis.Event do
   should be avoided unless you need to bypass the default event dispatching mechanism.
   """
   def process(event) when is_struct(event, __MODULE__) do
+    checksum = checksum(event)
+
     Enum.reduce_while(event.handlers, event, fn module, event ->
       case maybe_handle_event(module, event) do
-        {resp, event} when resp in [:cont, :halt] -> {resp, event}
-        other -> raise "Invalid response #{inspect(other)} from #{inspect(module)}"
+        {resp, event} when resp in [:cont, :halt] ->
+          {resp, verify_checksum(event, checksum)}
+
+        other ->
+          raise "Invalid response #{inspect(other)} from #{inspect(module)}"
       end
     end)
   end
@@ -48,5 +71,17 @@ defmodule Genesis.Event do
     if function_exported?(module, :handle_event, 2),
       do: module.handle_event(event.name, event),
       else: {:cont, event}
+  end
+
+  defp checksum(event) do
+    # Only changes to args are allowed
+    event = Map.delete(event, :args)
+    :crypto.hash(:sha256, :erlang.term_to_binary(event))
+  end
+
+  defp verify_checksum(event, checksum) do
+    if checksum(event) == checksum,
+      do: event,
+      else: raise("Event drifted during processing!")
   end
 end
