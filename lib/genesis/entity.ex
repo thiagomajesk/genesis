@@ -1,10 +1,19 @@
 defmodule Genesis.Entity do
   @moduledoc """
-  An opaque type that represents an entity and contains information about its origin.
+  A struct that represents an entity and contains information about its origin.
   In essence, an entity is simply a unique identifier (reference) that exists within a specific context.
   An entity holds information about the node, world, and context it belongs to, along with a unique identification hash.
-  """
 
+  ## Fields
+
+    * `:ref` - the unique reference for this entity
+    * `:node` - the node where the entity was created
+    * `:context` - the context where the entity lives
+    * `:world` - the world the entity was instantiated on
+    * `:hash` - a checksum that represents the entity's identity
+    * `:name` - the name the entity was registered with
+    * `:parent` - the entity this was cloned from
+  """
   @type t :: %__MODULE__{
           node: node(),
           context: pid(),
