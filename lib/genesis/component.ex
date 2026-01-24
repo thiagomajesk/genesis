@@ -263,7 +263,7 @@ defmodule Genesis.Component do
       def __component__(:properties), do: @properties
 
       def cast(attrs) when is_list(attrs) or is_non_struct_map(attrs),
-        do: Genesis.Component.__cast__(attrs, @properties)
+        do: Genesis.Component.__cast__(__MODULE__, attrs, @properties)
 
       def attach(%Genesis.Entity{} = entity),
         do: attach(entity, __MODULE__.new())
@@ -309,11 +309,13 @@ defmodule Genesis.Component do
   end
 
   @doc false
-  def __cast__(attrs, properties) do
+  def __cast__(component_type, attrs, properties) do
     Genesis.Value.cast(attrs, properties)
   rescue
     e in ArgumentError ->
-      reraise ArgumentError, "[#{inspect(__MODULE__)}] #{Exception.message(e)}", __STACKTRACE__
+      reraise ArgumentError,
+              "[#{inspect(component_type)}] #{Exception.message(e)}",
+              __STACKTRACE__
   end
 
   @doc false
