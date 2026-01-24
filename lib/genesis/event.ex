@@ -15,6 +15,7 @@ defmodule Genesis.Event do
     * `:args` - Additional event-specific data
     * `:handlers` - The list of modules that will handle the event
   """
+  @derive {Inspect, only: [:name, :args]}
   @enforce_keys [:name, :world, :entity, :timestamp]
   defstruct [:name, :world, :entity, :timestamp, args: %{}, handlers: []]
 
