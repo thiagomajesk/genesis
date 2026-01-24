@@ -2,12 +2,11 @@ defmodule Genesis.Entity do
   @moduledoc """
   A struct that represents an entity and contains information about its origin.
   In essence, an entity is simply a unique identifier (reference) that exists within a specific context.
-  An entity holds information about the node, world, and context it belongs to, along with a unique identification hash.
+  An entity holds information about the world and context it belongs to, along with a unique identification hash.
 
   ## Fields
 
     * `:ref` - the unique reference for this entity
-    * `:node` - the node where the entity was created
     * `:context` - the context where the entity lives
     * `:world` - the world the entity was instantiated on
     * `:hash` - a checksum that represents the entity's identity
@@ -15,7 +14,6 @@ defmodule Genesis.Entity do
     * `:parent` - the entity this was cloned from
   """
   @type t :: %__MODULE__{
-          node: node(),
           context: pid(),
           world: pid() | nil,
           ref: reference(),
@@ -24,7 +22,7 @@ defmodule Genesis.Entity do
           parent: t() | nil
         }
 
-  defstruct [:node, :context, :world, :ref, :hash, :name, :parent]
+  defstruct [:context, :world, :ref, :hash, :name, :parent]
 
   alias __MODULE__
 
@@ -44,14 +42,13 @@ defmodule Genesis.Entity do
     parent = Keyword.get(opts, :parent)
     context = Keyword.fetch!(opts, :context)
 
-    identity = {node(), world, context, ref}
+    identity = {world, context, ref}
     hash = :crypto.hash(:sha, :erlang.term_to_binary(identity))
 
     %Entity{
       ref: ref,
       hash: hash,
       name: name,
-      node: node(),
       world: world,
       parent: parent,
       context: context
@@ -66,7 +63,7 @@ defmodule Genesis.Entity do
   @doc """
   Returns true when the entity was created on this node.
   """
-  def local?(%Entity{node: node}), do: node == node()
+  def local?(%Entity{ref: ref}), do: node(ref) == node()
 
   @doc """
   Returns true when two entities share the same context.
