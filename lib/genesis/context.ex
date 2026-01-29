@@ -23,8 +23,8 @@ defmodule Genesis.Context do
   Same as `GenServer.start_link/3`.
   """
   @doc group: "Process API"
-  def start_link(args \\ []) do
-    GenServer.start_link(__MODULE__, args, args)
+  def start_link(options \\ []) do
+    GenServer.start_link(__MODULE__, options, options)
   end
 
   @doc """
@@ -32,13 +32,13 @@ defmodule Genesis.Context do
 
   See `Supervisor`.
   """
-  def child_spec(args) do
-    id = Keyword.get(args, :name, __MODULE__)
-    restart = Keyword.get(args, :restart, :temporary)
+  def child_spec(options) do
+    id = Keyword.get(options, :name, __MODULE__)
+    restart = Keyword.get(options, :restart, :temporary)
 
     %{
       id: id,
-      start: {__MODULE__, :start_link, [args]},
+      start: {__MODULE__, :start_link, [options]},
       type: :worker,
       restart: restart,
       shutdown: :brutal_kill
@@ -567,7 +567,7 @@ defmodule Genesis.Context do
   end
 
   @impl true
-  def init(_args) do
+  def init(_options) do
     opts = [:protected, read_concurrency: true]
     mtable = :ets.new(:mtable, [:set | opts])
     ctable = :ets.new(:ctable, [:bag | opts])

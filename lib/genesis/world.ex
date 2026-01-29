@@ -11,8 +11,8 @@ defmodule Genesis.World do
   Starts the world process.
   Same as `GenServer.start_link/3`.
   """
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts)
+  def start_link(options \\ []) do
+    GenServer.start_link(__MODULE__, options)
   end
 
   @doc """
@@ -226,9 +226,9 @@ defmodule Genesis.World do
   end
 
   @impl true
-  def init(opts) do
-    max_events = Access.get(opts, :max_events, 1000)
-    partitions = Access.get(opts, :partitions, System.schedulers_online())
+  def init(options) do
+    max_events = Access.get(options, :max_events, 1000)
+    partitions = Access.get(options, :partitions, System.schedulers_online())
 
     {:ok, context} = Genesis.Context.start_link()
     {:ok, supervisor} = Supervisor.start_link([], strategy: :one_for_one)
