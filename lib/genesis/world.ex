@@ -396,10 +396,8 @@ defmodule Genesis.World do
 
       {^entity, components} ->
         component_types = MapSet.new(components, & &1.__struct__)
-
-        event
-        |> Genesis.Manager.handlers()
-        |> Enum.filter(&MapSet.member?(component_types, &1))
+        handlers = Map.get(Genesis.Manager.handlers(), event, [])
+        Enum.filter(handlers, &MapSet.member?(component_types, &1))
     end
   end
 end

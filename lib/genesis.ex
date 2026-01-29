@@ -100,8 +100,7 @@ defmodule Genesis do
     children = [
       {Task.Supervisor, name: Genesis.TaskSupervisor},
       {Registry, keys: :unique, name: Genesis.Registry},
-      {Genesis.Context, name: Genesis.Prefabs, restart: :permanent},
-      {Genesis.Context, name: Genesis.Components, restart: :permanent}
+      {Genesis.Context, name: Genesis.Prefabs, restart: :permanent}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_all, name: Genesis.Supervisor)

@@ -34,13 +34,15 @@ defmodule Genesis.Utils do
   end
 
   def expand_components(component_lookup) do
+    components = Genesis.Manager.components()
+
     Enum.reduce(component_lookup, %{}, fn {name, properties}, acc ->
-      case Genesis.Context.lookup(Genesis.Components, name) do
-        {_entity, _types, metadata} ->
-          component_type = Code.ensure_loaded!(metadata.type)
+      case Map.fetch(components, name) do
+        {:ok, component_type} ->
+          component_type = Code.ensure_loaded!(component_type)
           Map.put(acc, component_type, properties)
 
-        nil ->
+        :error ->
           raise ArgumentError,
                 "component #{inspect(name)} is not registered. " <>
                   "Ensure it is registered with Genesis.Manager.register_components/1 first"

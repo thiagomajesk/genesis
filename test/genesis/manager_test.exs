@@ -14,56 +14,29 @@ defmodule Genesis.ManagerTest do
     on_exit(fn -> Manager.reset() end)
   end
 
-  describe "components" do
-    test "register_component with default alias" do
-      Manager.register_components([
-        Health,
-        Moniker,
-        Position,
-        Selectable
-      ])
+  test "components" do
+    Manager.register_components([
+      Health,
+      Moniker,
+      Position,
+      Selectable
+    ])
 
-      components = Manager.components()
+    components = Manager.components()
 
-      assert %{
-               "health" => Health,
-               "moniker" => Moniker,
-               "position" => Position,
-               "selectable" => Selectable
-             } = components
-    end
-
-    test "components indexed by type" do
-      Manager.register_components([
-        Health,
-        Moniker,
-        Position,
-        Selectable
-      ])
-
-      assert %{
-               Health => "health",
-               Moniker => "moniker",
-               Position => "position",
-               Selectable => "selectable"
-             } = Manager.components(index: :type)
-    end
+    assert %{
+             "health" => Health,
+             "moniker" => Moniker,
+             "position" => Position,
+             "selectable" => Selectable
+           } = components
   end
 
-  describe "handlers" do
-    test "list all event handlers" do
-      Manager.register_components([Health, Moniker])
+  test "handlers" do
+    Manager.register_components([Health, Moniker])
 
-      assert {:damage, [Health]} in Manager.handlers()
-      assert {:describe, [Moniker]} in Manager.handlers()
-    end
-
-    test "lists handlers for specific events" do
-      Manager.register_components([Health, Moniker])
-
-      assert [Health] == Manager.handlers(:damage)
-      assert [Moniker] == Manager.handlers(:describe)
-    end
+    assert {:damage, [Health]} in Manager.handlers()
+    assert {:describe, [Moniker]} in Manager.handlers()
   end
 
   describe "prefabs" do

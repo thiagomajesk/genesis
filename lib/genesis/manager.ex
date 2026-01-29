@@ -4,10 +4,6 @@ defmodule Genesis.Manager do
 
   ## Components
 
-  Genesis components are also entities with the exception they don't belong to a specific world.
-  They are registered globally and are available through a named context called `Genesis.Components`.
-  You can see all the registered components by calling `components/0`.
-
   Components can be registered with the `register_components/1` function which accepts a list of modules that implement
   the `Genesis.Component` behaviour. When components are registered, their order and some additional information is stored
   in a [`persistent_term`](https://www.erlang.org/doc/apps/erts/persistent_term.html) for efficient lookup during event dispatching.
@@ -42,6 +38,10 @@ defmodule Genesis.Manager do
 
   See the dedicated documentation for `Genesis.Prefab` for more details on prefab definitions.
   """
+
+  @events_key {__MODULE__, :events}
+  @components_key {__MODULE__, :components}
+
   @doc """
   Clones an entity or prefab into the target context.
 
@@ -90,48 +90,6 @@ defmodule Genesis.Manager do
   end
 
   @doc """
-  Returns a map of components registered in the manager.
-
-   ## Options
-
-    * `:index` - selects the key for the returned map (`:name` or `:type`).
-
-  ## Examples
-
-      Genesis.Manager.register_components([Health, Position])
-      #=> :ok
-
-      # Index by component name (default)
-      Genesis.Manager.components()
-      #=> %{"health" => Health, "position" => Position}
-
-      Genesis.Manager.components(index: :name)
-      #=> %{"health" => Health, "position" => Position}
-
-      # Index by component type
-      Genesis.Manager.components(index: :type)
-      #=> %{Health => "health", Position => "position"}
-  """
-  def components(opts \\ []) do
-    stream = Genesis.Context.metadata(Genesis.Components)
-
-    case Keyword.get(opts, :index, :name) do
-      :name ->
-        Map.new(stream, fn {entity, {_types, metadata}} ->
-          {entity.name, metadata.type}
-        end)
-
-      :type ->
-        Map.new(stream, fn {entity, {_types, metadata}} ->
-          {metadata.type, entity.name}
-        end)
-
-      other ->
-        raise ArgumentError, "invalid :index option #{inspect(other)}"
-    end
-  end
-
-  @doc """
   Returns a stream of prefabs registered in the manager.
 
   ## Examples
@@ -162,13 +120,20 @@ defmodule Genesis.Manager do
       Genesis.Manager.handlers()
       #=> [damage: [Health], move: [Position], heal: [Health]]
   """
-  def handlers, do: events_lookup_get()
+  def handlers, do: :persistent_term.get(@events_key, %{})
 
   @doc """
-  Returns the handlers registered for a specific event.
-  Same as `handlers/0` but filters by the specified event.
+  Returns a map of components registered in the manager.
+
+  ## Examples
+
+      Genesis.Manager.register_components([Health, Position])
+      #=> :ok
+
+      Genesis.Manager.components()
+      #=> %{"health" => Health, "position" => Position}
   """
-  def handlers(event) when is_atom(event), do: events_lookup_get(event)
+  def components(), do: :persistent_term.get(@components_key, %{})
 
   @doc """
   Registers component modules.
@@ -180,8 +145,20 @@ defmodule Genesis.Manager do
       #=> :ok
   """
   def register_components(components) when is_list(components) do
-    registered = Enum.map(components, &register_component!/1)
-    events_lookup_merge(build_events_lookup(registered))
+    registered = Enum.map(components, &ensure_component!/1)
+
+    Enum.each(registered, fn {component_type, name, events} ->
+      components = :persistent_term.get(@components_key, %{})
+      updated_components = Map.put(components, name, component_type)
+      :persistent_term.put(@components_key, updated_components)
+
+      Enum.each(events, fn event ->
+        events = :persistent_term.get(@events_key, %{})
+        # Store events in the correct order from the start since this will be static
+        updated_events = Map.update(events, event, [component_type], &(&1 ++ [component_type]))
+        :persistent_term.put(@events_key, updated_events)
+      end)
+    end)
   end
 
   @doc """
@@ -214,13 +191,13 @@ defmodule Genesis.Manager do
 
   @doc false
   def reset do
-    with true <- events_lookup_clear(),
+    with true <- :persistent_term.erase(@events_key),
+         true <- :persistent_term.erase(@components_key),
          :ok <- Genesis.Context.clear(Genesis.Prefabs),
-         :ok <- Genesis.Context.clear(Genesis.Components),
          do: :ok
   end
 
-  defp register_component!(component_type) when is_atom(component_type) do
+  defp ensure_component!(component_type) when is_atom(component_type) do
     if not Genesis.Utils.component?(component_type) do
       raise ArgumentError, "Invalid component type #{inspect(component_type)}"
     end
@@ -228,36 +205,17 @@ defmodule Genesis.Manager do
     name = component_type.__component__(:name)
     events = component_type.__component__(:events)
 
-    metadata = %{events: events, type: component_type}
+    components = :persistent_term.get(@components_key, %{})
 
-    create_opts = [name: name, metadata: metadata]
+    # Duplicate registrations are not a big deal, but it can be annoying if we allow silent
+    # overwrites. This can lead to subtle bugs that are hard to track down after the fact.
+    case Map.fetch(components, name) do
+      :error ->
+        {component_type, name, events}
 
-    case Genesis.Context.create(Genesis.Components, create_opts) do
-      {:ok, entity} ->
-        {entity, component_type, events}
-
-      {:error, :already_registered} ->
-        raise ArgumentError, "component #{inspect(name)} is already registered"
+      {:ok, component_type} ->
+        raise ArgumentError,
+              "The component #{inspect(component_type)} is already registered as #{inspect(name)}"
     end
   end
-
-  defp events_lookup_key, do: {__MODULE__, :events}
-
-  defp events_lookup_merge(events) do
-    updated = Map.merge(events_lookup_get(), events)
-    :persistent_term.put(events_lookup_key(), updated)
-  end
-
-  defp build_events_lookup(registered) do
-    Enum.reduce(registered, %{}, fn {_entity, type, events}, lookup ->
-      Enum.reduce(events, lookup, fn event, lookup ->
-        # Store events in the correct order from the start since this will be static
-        Map.update(lookup, event, [type], &(&1 ++ [type]))
-      end)
-    end)
-  end
-
-  defp events_lookup_get(event), do: Map.get(events_lookup_get(), event, [])
-  defp events_lookup_get, do: :persistent_term.get(events_lookup_key(), %{})
-  defp events_lookup_clear, do: :persistent_term.erase(events_lookup_key())
 end
