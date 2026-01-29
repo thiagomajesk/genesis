@@ -98,7 +98,6 @@ defmodule Genesis do
   @impl true
   def start(_type, _args) do
     children = [
-      Genesis.Manager,
       {Task.Supervisor, name: Genesis.TaskSupervisor},
       {Registry, keys: :unique, name: Genesis.Registry},
       {Genesis.Context, name: Genesis.Prefabs, restart: :permanent},

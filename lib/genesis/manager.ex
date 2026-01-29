@@ -42,9 +42,6 @@ defmodule Genesis.Manager do
 
   See the dedicated documentation for `Genesis.Prefab` for more details on prefab definitions.
   """
-
-  use GenServer
-
   @doc """
   Clones an entity or prefab into the target context.
 
@@ -216,13 +213,11 @@ defmodule Genesis.Manager do
   end
 
   @doc false
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc false
   def reset do
-    GenServer.call(__MODULE__, :reset)
+    with true <- events_lookup_clear(),
+         :ok <- Genesis.Context.clear(Genesis.Prefabs),
+         :ok <- Genesis.Context.clear(Genesis.Components),
+         do: :ok
   end
 
   defp register_component!(component_type) when is_atom(component_type) do
@@ -244,19 +239,6 @@ defmodule Genesis.Manager do
       {:error, :already_registered} ->
         raise ArgumentError, "component #{inspect(name)} is already registered"
     end
-  end
-
-  @impl true
-  def init(_opts), do: {:ok, %{}}
-
-  @impl true
-  def handle_call(:reset, _from, state) do
-    events_lookup_clear()
-
-    Genesis.Context.clear(Genesis.Prefabs)
-    Genesis.Context.clear(Genesis.Components)
-
-    {:reply, :ok, state}
   end
 
   defp events_lookup_key, do: {__MODULE__, :events}
