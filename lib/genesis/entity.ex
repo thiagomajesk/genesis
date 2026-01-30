@@ -13,8 +13,10 @@ defmodule Genesis.Entity do
     * `:name` - the name the entity was registered with
     * `:parent` - the entity this was cloned from
   """
+  @type context :: pid() | atom()
+
   @type t :: %__MODULE__{
-          context: pid(),
+          context: context(),
           world: pid() | nil,
           ref: reference(),
           hash: binary(),
@@ -78,7 +80,9 @@ defmodule Genesis.Entity do
   @doc """
   Returns true when the entity is a prefab.
   """
-  def prefab?(%Entity{context: context}), do: Process.whereis(Genesis.Prefabs) == context
+  def prefab?(%Entity{context: context}) do
+    Process.whereis(Genesis.Prefabs) == context
+  end
 
   @doc """
   Returns true when the entity is a child of another entity.
