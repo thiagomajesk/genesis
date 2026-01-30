@@ -16,7 +16,7 @@ In the case of Genesis, the ECS terminology is used quite loosely as we don't ma
 ```elixir
 def deps do
   [
-    {:genesis, "~> 0.9.0"}
+    {:genesis, "~> 0.10.0"}
   ]
 end
 ```
