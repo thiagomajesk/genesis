@@ -37,10 +37,62 @@ defmodule Genesis.Manager do
       })
 
   See the dedicated documentation for `Genesis.Prefab` for more details on prefab definitions.
+
+  ## Notifications
+
+  Notifications are a useful way to react to entity changes without needing to poll for updates constantly.
+  It's specially useful in scenarios where you need to have some piece of UI that needs to be updated on demand.
+
+  When an entity is modified, the manager dispatches notifications to the registered processes right before calling the `Genesis.Component.on_hook/3` callback.
+  Processes watching for changes can specify which hooks and component types they are interested in by passing additional options to the `watch/2` function.
   """
+
+  @pubsub Genesis.PubSub
+  @hooks [:attached, :removed, :updated]
 
   @events_key {__MODULE__, :events}
   @components_key {__MODULE__, :components}
+
+  require Logger
+
+  @doc """
+  Starts receiving notifications for the entities in the given world.
+
+  ## Options
+
+    * `:hooks` - A list of hooks to watch for. Defaults to all hooks (`:attached, :removed, :updated`).
+    * `:components` - A list of component modules to watch for. Defaults to all registered components.
+  """
+  def watch(world, opts \\ []) when is_pid(world) do
+    watched_hooks = Keyword.get(opts, :hooks, @hooks)
+    watched_components = Keyword.get(opts, :components, Map.values(components()))
+
+    Enum.each(watched_hooks, fn hook ->
+      currently_watching = Registry.lookup(@pubsub, {world, hook})
+
+      if not Enum.any?(currently_watching, fn {pid, _} -> pid == self() end) do
+        Registry.register(@pubsub, {world, hook}, watched_components)
+        Logger.info("Watching #{inspect(hook)} notifications for world #{inspect(world)}")
+      end
+    end)
+  end
+
+  @doc """
+  Stops receiving notifications for the entities in the given world.
+  """
+  def unwatch(world) when is_pid(world) do
+    Enum.each(@hooks, &Registry.unregister(@pubsub, {world, &1}))
+    Logger.info("Unwatched notifications for world #{inspect(world)}")
+  end
+
+  @doc false
+  def notify(entity, hook, component_type) do
+    Registry.dispatch(@pubsub, {entity.world, hook}, fn entries ->
+      for {pid, watched_components} <- entries,
+          component_type in watched_components,
+          do: send(pid, {hook, component_type, entity})
+    end)
+  end
 
   @doc """
   Clones an entity or prefab into the target context.

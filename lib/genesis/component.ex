@@ -86,6 +86,7 @@ defmodule Genesis.Component do
   @type component :: struct()
   @type entity :: Genesis.Entity.t()
   @type properties :: keyword() | map()
+  @type hook :: :attached | :removed | :updated
 
   @optional_callbacks handle_event: 2
 
@@ -110,7 +111,7 @@ defmodule Genesis.Component do
   Called when a component is `:attached`, `:removed` or `:updated` on an entity.
   Receives the hook name, the entity, and the component struct that triggered the hook.
   """
-  @callback on_hook(atom(), entity(), component()) :: any()
+  @callback on_hook(hook(), entity(), component()) :: any()
 
   @doc """
   Casts the given properties into a map of permitted values.
@@ -457,13 +458,13 @@ defmodule Genesis.Component do
   end
 
   defp invoke_hook(component_type, hook, entity, component) do
-    args = [hook, entity, component]
+    Task.Supervisor.async_nolink(Genesis.TaskSupervisor, fn ->
+      # Notifications only notify that a specific component type has changed.
+      # The client should be responsible for deduping and fetching the current value.
+      Genesis.Manager.notify(entity, hook, component_type)
 
-    Task.Supervisor.async_nolink(
-      Genesis.TaskSupervisor,
-      component_type,
-      :on_hook,
-      args
-    )
+      # Finally invoke the component's hook callback
+      component_type.on_hook(hook, entity, component)
+    end)
   end
 end
